@@ -1,0 +1,63 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+
+venv/
+env/
+.venv/
+ENV/
+
+# API keys and credentials
+.env
+*.env
+*_secrets.yaml
+*_secrets.yml
+api_keys.json
+credentials.json
+*.key
+
+# data
+data/raw/
+data/processed/
+data/cache/
+*.csv
+*.json
+*.parquet
+*.pkl
+*.pickle
+
+# models
+outputs/models/
+*.pth
+*.pt
+*.h5
+*.ckpt
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+
+*.log
+logs/
+
+
+*.tmp
+*.temp
