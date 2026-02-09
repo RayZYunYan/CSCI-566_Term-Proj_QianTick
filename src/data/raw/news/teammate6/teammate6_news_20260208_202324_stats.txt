@@ -1,0 +1,19 @@
+QianTick News Collection Statistics Report
+============================================================
+
+Collector: Hanzhen Qin (teammate6)
+Collection time: 2026-02-08 20:23:24
+
+GDELT Tasks:
+  Period: 2025-06-01 to 2025-12-31
+  Number of themes: 12
+
+============================================================
+
+Collection Results:
+  Total: 2,285 articles
+
+Data source distribution:
+  gdelt: 2,285 articles
+
+Time range: 20251108T094500Z to 20260101T234500Z
