@@ -1,0 +1,28 @@
+QianTick News Collection Statistics Report
+============================================================
+
+Collector: Teammate 4 (teammate4)
+Collection time: 2026-02-09 09:57:40
+
+Finnhub Tasks:
+  Stocks: TSLA, NFLX, CRM
+  Period: 2022-06-01 to 2025-12-31
+
+GDELT Tasks:
+  Period: 2024-04-01 to 2024-10-31
+  Number of themes: 12
+
+============================================================
+
+Collection Results:
+  Total: 2,942 articles
+
+Data source distribution:
+  gdelt: 2,230 articles
+  finnhub: 712 articles
+
+Stock distribution:
+  TSLA: 244 articles
+  CRM: 243 articles
+  NFLX: 225 articles
+
