@@ -6,7 +6,7 @@ __pycache__/
 *.pyd
 .Python
 
-
+# Virtual Environments
 venv/
 env/
 .venv/
@@ -21,17 +21,18 @@ api_keys.json
 credentials.json
 *.key
 
-# data
-data/raw/
-data/processed/
+# Data
+!data/
+!data/raw/
+!data/processed/
 data/cache/
-*.csv
-*.json
+
+# Ignore large binary or intermediate files.
 *.parquet
 *.pkl
 *.pickle
 
-# models
+# Models / Outputs
 outputs/models/
 *.pth
 *.pt
@@ -42,22 +43,22 @@ outputs/models/
 .ipynb_checkpoints/
 *.ipynb_checkpoints
 
-# IDE
+# IDE / Editors
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# OS
+# Operating System files
 .DS_Store
 Thumbs.db
 Desktop.ini
 
-
+# Logs
 *.log
 logs/
 
-
+# Temp files
 *.tmp
 *.temp
