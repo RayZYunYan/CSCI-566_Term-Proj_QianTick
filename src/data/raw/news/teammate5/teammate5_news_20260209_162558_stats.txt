@@ -1,0 +1,28 @@
+QianTick News Collection Statistics Report
+============================================================
+
+Collector: Teammate 5 (teammate5)
+Collection time: 2026-02-09 16:25:58
+
+Finnhub Tasks:
+  Stocks: ORCL, ADBE, SHOP
+  Period: 2022-06-01 to 2025-12-31
+
+GDELT Tasks:
+  Period: 2024-11-01 to 2025-05-31
+  Number of themes: 12
+
+============================================================
+
+Collection Results:
+  Total: 3,017 articles
+
+Data source distribution:
+  gdelt: 2,322 articles
+  finnhub: 695 articles
+
+Stock distribution:
+  ADBE: 236 articles
+  ORCL: 234 articles
+  SHOP: 225 articles
+
