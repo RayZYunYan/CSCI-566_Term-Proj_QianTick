@@ -386,6 +386,22 @@ class TeamNewsCollector:
         # Convert to DataFrame
         df = pd.DataFrame(all_news)
 
+        # normalize datetime into a real pandas datetime dtype
+        if 'datetime' in df.columns:
+            df['datetime'] = pd.to_datetime(
+                df['datetime'],
+                errors='coerce',
+                unit='s'  # handles Finnhub UNIX timestamps
+            )
+
+            # GDELT dates are strings like YYYYMMDDHHMMSS
+            mask = df['datetime'].isna()
+            df.loc[mask, 'datetime'] = pd.to_datetime(
+                df.loc[mask, 'datetime'],
+                errors='coerce',
+                format='%Y%m%d%H%M%S'
+            )
+
         if not df.empty:
             # Deduplicate
             original = len(df)

@@ -1,0 +1,29 @@
+QianTick News Collection Statistics Report
+============================================================
+
+Collector: Teammate 3 (teammate3)
+Collection time: 2026-02-09 18:07:49
+
+Finnhub Tasks:
+  Stocks: AMZN, META, AMD
+  Period: 2022-06-01 to 2025-12-31
+
+GDELT Tasks:
+  Period: 2023-09-01 to 2024-03-31
+  Number of themes: 12
+
+============================================================
+
+Collection Results:
+  Total: 2,516 articles
+
+Data source distribution:
+  gdelt: 1,856 articles
+  finnhub: 660 articles
+
+Stock distribution:
+  AMZN: 243 articles
+  AMD: 219 articles
+  META: 198 articles
+
+Time range: 2025-09-22 18:11:15 to 2025-12-31 22:13:37
