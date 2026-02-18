@@ -1,0 +1,46 @@
+QianTick Finnhub Collection Report
+============================================================
+
+Collector: Ray (teammate1)
+Collection Time: 2026-02-17 15:08:09
+
+Configuration:
+  Stocks: AAPL, MSFT, GOOGL
+  Time Range: 2025-02-17 to 2026-02-17
+  Weeks: 46
+
+============================================================
+
+Results:
+  Total Articles: 30,387
+
+Stock Distribution:
+  GOOGL: 10,199 articles
+  MSFT: 10,134 articles
+  AAPL: 10,054 articles
+
+Time Range:
+  Earliest: 2020-06-11 17:06:37
+  Latest: 2026-02-17 21:45:49
+
+Monthly Distribution:
+  2020-06: 2 articles
+  2020-07: 1 articles
+  2021-04: 1 articles
+  2022-05: 1 articles
+  2024-04: 1 articles
+  2024-10: 1 articles
+  2024-11: 1 articles
+  2025-02: 362 articles
+  2025-03: 1,640 articles
+  2025-04: 2,518 articles
+  2025-05: 2,636 articles
+  2025-06: 2,407 articles
+  2025-07: 2,839 articles
+  2025-08: 2,667 articles
+  2025-09: 2,760 articles
+  2025-10: 2,799 articles
+  2025-11: 2,717 articles
+  2025-12: 2,576 articles
+  2026-01: 2,364 articles
+  2026-02: 2,094 articles
