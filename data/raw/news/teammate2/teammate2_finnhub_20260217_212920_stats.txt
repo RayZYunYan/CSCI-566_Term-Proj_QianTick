@@ -1,0 +1,42 @@
+QianTick Finnhub Collection Report
+============================================================
+
+Collector: Yuxuan (teammate2)
+Collection Time: 2026-02-17 21:29:20
+
+Configuration:
+  Stocks: NVDA, QCOM, INTC
+  Time Range: 2025-02-17 to 2026-02-17
+  Weeks: 46
+
+============================================================
+
+Results:
+  Total Articles: 18,875
+
+Stock Distribution:
+  NVDA: 10,906 articles
+  INTC: 5,638 articles
+  QCOM: 2,331 articles
+
+Time Range:
+  Earliest: 2021-04-25 04:33:14
+  Latest: 2026-02-17 23:51:27
+
+Monthly Distribution:
+  2021-04: 1 articles
+  2024-06: 1 articles
+  2024-08: 1 articles
+  2025-02: 238 articles
+  2025-03: 1,216 articles
+  2025-04: 1,632 articles
+  2025-05: 1,318 articles
+  2025-06: 1,258 articles
+  2025-07: 1,639 articles
+  2025-08: 1,756 articles
+  2025-09: 1,661 articles
+  2025-10: 1,841 articles
+  2025-11: 1,527 articles
+  2025-12: 1,524 articles
+  2026-01: 1,717 articles
+  2026-02: 1,545 articles
