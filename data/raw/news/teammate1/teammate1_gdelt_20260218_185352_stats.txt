@@ -1,0 +1,54 @@
+QianTick GDELT Collection Report - Final Version
+============================================================
+
+Collector: Ray (teammate1)
+Collection Time: 2026-02-18 18:53:52
+
+Configuration:
+  Time Period: 2022-06-01 to 2023-01-31
+  Months: 8
+  Themes: 18
+  Strategy: Monthly segmentation + headline deduplication
+  Language: English only
+
+============================================================
+
+Results:
+  Total Articles: 17,648
+
+Theme Distribution:
+  technology regulation policy: 1,480 articles
+  Silicon Valley: 1,333 articles
+  tech stocks bull market: 1,273 articles
+  CHIPS act semiconductor: 1,238 articles
+  antitrust tech companies: 1,226 articles
+  chip shortage supply chain: 1,150 articles
+  technology stocks analyst: 1,144 articles
+  venture capital technology: 1,083 articles
+  tech IPO nasdaq: 945 articles
+  technology investment market: 943 articles
+  inflation technology sector: 928 articles
+  Fed policy tech stocks: 912 articles
+  tech sector earnings: 902 articles
+  technology sector outlook: 829 articles
+  Federal Reserve interest rate technology: 824 articles
+  recession tech stocks: 624 articles
+  semiconductor geopolitics: 417 articles
+  tech stocks Wall Street: 397 articles
+
+Time Range:
+  Earliest: 2022-06-01 15:30:00+00:00
+  Latest: 2023-02-01 23:45:00+00:00
+
+Language Distribution:
+  English: 17,648 articles (100.0%)
+
+Monthly Distribution:
+  2022-06: 2,110 articles
+  2022-07: 2,031 articles
+  2022-08: 2,340 articles
+  2022-09: 2,181 articles
+  2022-10: 2,166 articles
+  2022-11: 2,334 articles
+  2022-12: 2,093 articles
+  2023-01: 2,393 articles
