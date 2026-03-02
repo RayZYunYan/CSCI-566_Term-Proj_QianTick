@@ -62,3 +62,6 @@ logs/
 # Temp files
 *.tmp
 *.temp
+
+# Ignore specific files that are being edited by teammates
+src/data_collection/gdelt_collector_3.py

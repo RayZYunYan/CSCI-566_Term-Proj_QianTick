@@ -1,0 +1,43 @@
+QianTick Finnhub Collection Report
+============================================================
+
+Collector: Yunfei Wang (teammate3)
+Collection Time: 2026-03-01 22:37:30
+
+Configuration:
+  Stocks: AMZN, META, AMD
+  Time Range: 2025-02-17 to 2026-02-17
+  Weeks: 46
+
+============================================================
+
+Results:
+  Total Articles: 25,922
+
+Stock Distribution:
+  AMZN: 10,011 articles
+  META: 9,151 articles
+  AMD: 6,760 articles
+
+Time Range:
+  Earliest: 2021-04-26 22:21:43
+  Latest: 2026-02-17 23:51:27
+
+Monthly Distribution:
+  2021-04: 1 articles
+  2023-04: 1 articles
+  2024-04: 1 articles
+  2024-11: 1 articles
+  2024-12: 1 articles
+  2025-03: 1,096 articles
+  2025-04: 1,950 articles
+  2025-05: 2,092 articles
+  2025-06: 2,092 articles
+  2025-07: 2,381 articles
+  2025-08: 2,607 articles
+  2025-09: 1,986 articles
+  2025-10: 2,654 articles
+  2025-11: 2,589 articles
+  2025-12: 2,252 articles
+  2026-01: 2,320 articles
+  2026-02: 1,898 articles
