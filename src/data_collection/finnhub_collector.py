@@ -26,7 +26,7 @@ load_dotenv()
 # ============================================
 
 # Switch teammate by changing this line
-CURRENT_TEAMMATE = 'teammate1'  # Change to 'teammate2', 'teammate3', etc.
+CURRENT_TEAMMATE = 'teammate_'  # Available teammates: teammate1, teammate2, teammate3, teammate4, teammate5
 
 
 # ============================================
@@ -129,8 +129,9 @@ class FinnhubCollector:
         if self.config['stocks'] and not self.finnhub_key:
             raise ValueError("FINNHUB_API_KEY not found in .env file")
         
-        # Output directory
-        self.output_dir = Path(f"data/raw/news/{teammate_id}")
+        # Output directory (always relative to project root, not cwd)
+        project_root = Path(__file__).resolve().parent.parent.parent
+        self.output_dir = project_root / "data" / "raw" / "news" / teammate_id
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
         # Generate weekly periods
