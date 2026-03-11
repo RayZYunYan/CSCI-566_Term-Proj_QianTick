@@ -1,0 +1,42 @@
+QianTick Finnhub Collection Report
+============================================================
+
+Collector: Kaicheng Li (teammate4)
+Collection Time: 2026-03-10 15:48:13
+
+Configuration:
+  Stocks: TSLA, NFLX, CRM
+  Time Range: 2025-02-17 to 2026-02-17
+  Weeks: 46
+
+============================================================
+
+Results:
+  Total Articles: 17,047
+
+Stock Distribution:
+  TSLA: 9,885 articles
+  NFLX: 3,873 articles
+  CRM: 3,289 articles
+
+Time Range:
+  Earliest: 2020-06-11 17:06:37
+  Latest: 2026-02-17 23:30:00
+
+Monthly Distribution:
+  2020-06: 2 articles
+  2021-04: 1 articles
+  2024-10: 1 articles
+  2024-11: 1 articles
+  2025-03: 595 articles
+  2025-04: 1,512 articles
+  2025-05: 1,477 articles
+  2025-06: 1,130 articles
+  2025-07: 1,605 articles
+  2025-08: 1,291 articles
+  2025-09: 1,334 articles
+  2025-10: 1,781 articles
+  2025-11: 1,441 articles
+  2025-12: 1,940 articles
+  2026-01: 1,677 articles
+  2026-02: 1,259 articles
