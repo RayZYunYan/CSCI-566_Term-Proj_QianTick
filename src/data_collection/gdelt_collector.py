@@ -18,7 +18,6 @@ import pandas as pd
 from datetime import datetime, timedelta
 from pathlib import Path
 from dotenv import load_dotenv
-from collections import Counter
 
 load_dotenv()
 
@@ -28,7 +27,7 @@ load_dotenv()
 # ============================================
 
 # Switch teammate by changing this line
-CURRENT_TEAMMATE = 'teammate6'  # Available teammates: teammate1, teammate2, teammate3, teammate4, teammate5, teammate6
+CURRENT_TEAMMATE = 'teammate_'  # Available teammates: teammate1, teammate2, teammate3, teammate4, teammate5, teammate6
 
 
 # ============================================
