@@ -10,7 +10,6 @@ Features:
 ================================================
 """
 
-import os
 import json
 import time
 import requests
