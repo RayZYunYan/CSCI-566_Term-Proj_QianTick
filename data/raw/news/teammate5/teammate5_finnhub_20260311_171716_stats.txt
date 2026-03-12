@@ -1,0 +1,39 @@
+QianTick Finnhub Collection Report
+============================================================
+
+Collector: Zeli Zhu (teammate5)
+Collection Time: 2026-03-11 17:17:16
+
+Configuration:
+  Stocks: ORCL, ADBE, SHOP
+  Time Range: 2025-02-17 to 2026-02-17
+  Weeks: 46
+
+============================================================
+
+Results:
+  Total Articles: 9,220
+
+Stock Distribution:
+  ORCL: 5,489 articles
+  ADBE: 2,010 articles
+  SHOP: 1,721 articles
+
+Time Range:
+  Earliest: 2024-10-31 22:30:48
+  Latest: 2026-02-17 23:23:07
+
+Monthly Distribution:
+  2024-10: 1 articles
+  2025-03: 222 articles
+  2025-04: 357 articles
+  2025-05: 331 articles
+  2025-06: 764 articles
+  2025-07: 696 articles
+  2025-08: 812 articles
+  2025-09: 1,191 articles
+  2025-10: 1,041 articles
+  2025-11: 905 articles
+  2025-12: 1,261 articles
+  2026-01: 800 articles
+  2026-02: 839 articles
