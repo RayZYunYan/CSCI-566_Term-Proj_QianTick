@@ -1,0 +1,61 @@
+# QianTick News Data Merge Record
+
+## Source: FINNHUB
+
+- [CSV files]
+    data/raw/news/teammate1/teammate1_finnhub_20260217_150808.csv      rows =  30,387
+    data/raw/news/teammate2/teammate2_finnhub_20260217_212920.csv      rows =  18,875
+    data/raw/news/teammate3/teammate3_finnhub_20260301_223729.csv      rows =  25,922
+    data/raw/news/teammate4/teammate4_finnhub_20260310_154813.csv      rows =  17,047
+    data/raw/news/teammate5/teammate5_finnhub_20260311_171716.csv      rows =   9,220
+
+Total before deduplicate: rows = 101451
+Total after deduplicate: rows = 101451
+Duplicates removed 0
+
+- [JSON files]
+    data/raw/news/teammate1/teammate1_finnhub_20260217_150808.json     rows =  30,387
+    data/raw/news/teammate2/teammate2_finnhub_20260217_212920.json     rows =  18,875
+    data/raw/news/teammate3/teammate3_finnhub_20260301_223729.json     rows =  25,922
+    data/raw/news/teammate4/teammate4_finnhub_20260310_154813.json     rows =  17,047
+    data/raw/news/teammate5/teammate5_finnhub_20260311_171716.json     rows =   9,220
+
+Total before deduplicate: rows = 101451
+Total after deduplicate: rows = 101451
+Duplicates removed 0
+
+### Output:
+
+data/processed/news/finnhub_merged.csv: rows = 101451
+data/processed/news/finnhub_merged.json: rows = 101451
+
+## Source: GDELT
+
+- [CSV files]
+    data/raw/news/teammate1/teammate1_gdelt_20260218_185352.csv        rows =  17,648
+    data/raw/news/teammate2/teammate2_gdelt_20260223_021237.csv        rows =  15,659
+    data/raw/news/teammate3/teammate3_gdelt_20260302_021833.csv        rows =  16,224
+    data/raw/news/teammate4/teammate4_gdelt_20260310_162851.csv        rows =  16,673
+    data/raw/news/teammate5/teammate5_gdelt_20260311_180734.csv        rows =  16,429
+    data/raw/news/teammate6/teammate6_gdelt_20260310_221454.csv        rows =  15,623
+
+Total before deduplicate: rows = 98256
+Total after deduplicate: rows = 98191
+Duplicates removed 65
+
+- [JSON files]
+    data/raw/news/teammate1/teammate1_gdelt_20260218_185352.json       rows =  17,648
+    data/raw/news/teammate2/teammate2_gdelt_20260223_021237.json       rows =  15,659
+    data/raw/news/teammate3/teammate3_gdelt_20260302_021833.json       rows =  16,224
+    data/raw/news/teammate4/teammate4_gdelt_20260310_162851.json       rows =  16,673
+    data/raw/news/teammate5/teammate5_gdelt_20260311_180734.json       rows =  16,429
+    data/raw/news/teammate6/teammate6_gdelt_20260310_221454.json       rows =  15,623
+
+Total before deduplicate: rows = 98256
+Total after deduplicate: rows = 98191
+Duplicates removed 65
+
+### Output:
+
+data/processed/news/gdelt_merged.csv: rows = 98191
+data/processed/news/gdelt_merged.json: rows = 98191
