@@ -33,7 +33,8 @@ data/cache/
 *.pickle
 
 # Models / Outputs
-outputs/models/
+outputs/
+checkpoints/
 *.pth
 *.pt
 *.h5

@@ -1,0 +1,22 @@
+# Fusion Model Config (Cross-Attention)
+
+data:
+  news_features: data/features/news_features.parquet
+  price_features: data/features/price_features.parquet
+
+model:
+  news_dim: 771           # FinBERT 768 + 3 sentiment
+  price_dim: 192          # LSTM 128 + tech MLP 64
+  fusion_dim: 256         # Cross-Attention 输出维度
+  nhead: 4                # Attention heads
+  dropout: 0.1
+
+training:
+  seed: 42
+  epochs: 50
+  batch_size: 128
+  lr: 5.0e-4
+  weight_decay: 1.0e-5
+  scheduler: cosine
+  early_stopping_patience: 7
+  checkpoint: checkpoints/fusion_best.pt

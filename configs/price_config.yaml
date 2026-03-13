@@ -1,0 +1,46 @@
+# Price Line Config (LSTM/Transformer)
+
+data:
+  price_window: 30        # 过去 N 天价格序列
+  raw_dir: data/raw/price
+  processed_dir: data/processed/price
+  feature_output: data/features/price_features.parquet
+  tickers:
+    - AAPL
+    - MSFT
+    - GOOGL
+    - NVDA
+    - TSLA
+    - META
+    - AMZN
+    - AMD
+    - INTC
+    - CRM
+    - NFLX
+    - AVGO
+  start_date: "2022-01-01"
+  end_date: "2025-12-31"
+
+model:
+  encoder: lstm           # lstm | transformer
+  # LSTM 参数
+  lstm_hidden_dim: 128
+  lstm_num_layers: 2
+  lstm_dropout: 0.2
+  # Transformer 参数（encoder=transformer 时生效）
+  d_model: 128
+  nhead: 4
+  transformer_layers: 2
+  transformer_dropout: 0.1
+  # 技术指标 MLP
+  tech_hidden_dim: 64
+
+training:
+  seed: 42
+  epochs: 50
+  batch_size: 128
+  lr: 1.0e-3
+  weight_decay: 1.0e-5
+  scheduler: cosine
+  early_stopping_patience: 7
+  checkpoint: checkpoints/price_best.pt

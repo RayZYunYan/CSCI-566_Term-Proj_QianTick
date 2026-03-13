@@ -1,0 +1,22 @@
+# News Line Config (FinBERT-based)
+
+data:
+  news_window: 7          # 过去 N 天新闻
+  processed_dir: data/processed/news
+  feature_output: data/features/news_features.parquet
+
+model:
+  finbert_model: ProsusAI/finbert
+  freeze_bert: true       # 是否冻结 FinBERT 权重
+  aggregation: mean       # 新闻聚合方式: mean | attention
+  hidden_dim: 256         # baseline MLP 隐层维度
+
+training:
+  seed: 42
+  epochs: 30
+  batch_size: 64
+  lr: 1.0e-4
+  weight_decay: 1.0e-5
+  scheduler: cosine       # cosine | step | none
+  early_stopping_patience: 5
+  checkpoint: checkpoints/news_best.pt
