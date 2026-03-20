@@ -1,0 +1,166 @@
+# Price Prediction and Fusion Plan
+
+Our project is now formally defined as a deep learning classification system for short-term stock movement prediction. 
+The primary objective is to predict the direction of a given stock on the next trading day, namely whether the stock will 
+move up or down, based on its historical price information over a recent time window. At the overall project level, the 
+main research direction is no longer centered on news or text modeling; instead, it is structured around a pure price-based 
+time series classification framework. Accordingly, our core efforts will focus on price data collection, time-series 
+feature construction, deep learning model comparison, unified evaluation design, and the development of a complete 
+engineering pipeline. Within the team collaboration framework, our group is responsible for the price module, while 
+the news group is responsible for the news module. The final system will integrate the outputs of both sides under 
+a shared prediction target and a shared temporal alignment scheme to form the team's complete forecasting architecture.
+
+In the data preparation stage, we will first use yfinance to collect historical daily stock data for the selected target 
+stocks. The retrieved fields will include at least Open, High, Low, Close, Adj Close, and Volume, which serve as the 
+foundation for all downstream modeling tasks. To ensure sufficient sample size and improve model robustness, we will 
+collect data over an extended historical horizon and include multiple target stocks rather than relying on a single 
+stock series. The purpose of this design is to transform raw daily market records into a sufficiently large pool of 
+supervised learning samples instead of treating each stock as an isolated sequence. In addition, we will collect 
+several market-related auxiliary price series, such as SPY, QQQ, ^VIX, and XLK, which capture broader market conditions, 
+sector-level behavior, and market risk sentiment. Although the project is positioned as a price-only classification 
+system, these external market variables remain part of the price side and can therefore be incorporated as auxiliary 
+time-series features without changing the project's core definition.
+
+In the label construction stage, the task will be formulated as a standard binary classification problem. For any stock 
+sample observed at time t, the prediction target is the stock's direction on the next trading day. Specifically, the 
+label is defined by comparing the closing price at t+1 with the closing price at t. If the stock price rises on the 
+next trading day, the label is assigned as 1; if it falls or does not increase, the label is assigned as 0. This 
+formulation is simple, interpretable, and well suited to serve as the unified target throughout the full modeling 
+pipeline. To prevent data leakage, all input features must be constructed exclusively from information observable 
+at or before the prediction time. No future information may be used at any stage of preprocessing, feature engineering, 
+model training, or final fusion.
+
+During the feature engineering stage, we will transform the raw OHLCV records into structured inputs suitable for deep 
+learning time-series models. The basic features will include daily returns, log returns, price change ratios, and volume 
+change ratios. On top of these, we will construct a set of widely used technical indicators, including moving averages, 
+exponential moving averages, RSI, MACD, Bollinger Bands, ATR, and rolling volatility. These indicators are not intended 
+to replace model learning; rather, they provide clearer representations of local trend, volatility, momentum, and 
+overbought or oversold conditions. For each supervised sample, we will adopt a fixed-length lookback window, such as 
+the previous 20 or 30 trading days, and organize all price-side features within that window into a multivariate 
+time-series tensor for predicting the next day's direction. The auxiliary market series, such as SPY, QQQ, ^VIX, and 
+XLK, will be aligned over the same time window and incorporated as additional feature dimensions, enabling the model 
+to learn both stock-specific behavior and the broader market context simultaneously.
+
+For model selection, we formally determine the three main architectures as GRU, LSTM, and TCN. The rationale for 
+choosing these models is clear and methodologically grounded. LSTM is one of the most established deep learning 
+models for sequential data and is highly suitable as a strong benchmark for financial time-series prediction because 
+of its ability to capture temporal dependency structures. GRU can be viewed as a lighter and more computationally 
+efficient recurrent architecture; in many medium-scale sequence tasks, it often achieves performance comparable to 
+or even more stable than LSTM while using fewer parameters. This makes it an important model to include in the 
+comparison. TCN, by contrast, represents a different modeling paradigm from recurrent networks. Through causal 
+convolutions and dilated convolutions, it can model temporal dependencies efficiently while benefiting from faster 
+training and more stable gradient propagation. TCN has also shown strong competitiveness in short-term financial 
+forecasting tasks. By jointly evaluating these three architectures, we can compare different temporal modeling 
+mechanisms under a unified experimental setup and establish a more convincing and systematic benchmark framework 
+for the price-side prediction module.
+
+In the training and evaluation stage, all three models will be trained under a strictly controlled and fully 
+consistent experimental setting. They will use the same input representation, the same lookback window, and the 
+same train-validation-test split strategy to ensure fairness in comparison. Because this is a financial time-series 
+problem, we will not use random splitting. Instead, we will adopt a strict time-based split, meaning that the 
+models are always trained on earlier data and evaluated on later data, thereby preserving the realistic forecasting 
+setting of using the past to predict the future. The evaluation metrics will primarily include Accuracy, 
+Precision, Recall, F1-score, and ROC-AUC. Accuracy provides a direct measure of overall directional correctness, 
+while Precision and Recall help reveal whether the model shows bias toward recognizing upward or downward signals. 
+F1-score summarizes classification balance, and ROC-AUC evaluates the overall discriminative quality of predicted 
+probabilities. Based on these unified metrics, we will compare the three price models on the same test set and 
+select the most stable and effective price-side predictor.
+
+At the engineering level, the system will be organized around a standardized entry script named main_pipeline.py. 
+The purpose of this pipeline is not merely to train a single model, but to coordinate the full workflow in a unified 
+manner, including data fetching, data cleaning, feature engineering, sample construction, dataset splitting, model 
+training, result evaluation, and final output generation. In other words, main_pipeline.py will serve as the 
+central controller of the entire project, allowing us to execute the full process from raw price data to final 
+classification output under one reproducible framework. The main advantages of this design are clearer code 
+organization, stronger experimental reproducibility, standardized output formats, and easier downstream integration 
+with other modules in the team project. The final system will store each model's predicted labels, probability 
+outputs, evaluation metrics, and comparative summaries in a consistent manner so that the later fusion stage can 
+be implemented smoothly.
+
+For collaboration with the news group and for final system fusion, we have decided to use a simple logistic regression 
+model as the final fusion layer. The key idea is that the price module and the news module should not merely output 
+hard labels and then combine them through a crude voting strategy. Instead, both sides should output probabilities 
+for the event that the stock will go up on the next trading day. On our side, the three price models—GRU, LSTM, and 
+TCN—will each produce an upward-movement probability for the same stock at the same prediction time. The news group 
+will likewise provide a probability score based on aligned news information. These four probability values will then 
+be used as inputs to a logistic regression model, which will learn the final fusion decision. The advantage of this 
+approach is that the system does not need to assume that all modules are equally reliable. Instead, it can learn from 
+data which signals are more trustworthy and assign appropriate weights accordingly, resulting in a final prediction 
+layer that is more professional, more robust, and more interpretable.
+
+From the perspective of team coordination, this means that the most important alignment between our group and the news 
+group is not the specific internal modeling details of each side, but rather the consistency of the external interface. 
+Both groups must ensure that they predict the same stock, at the same time point, and for the same future target 
+horizon. Both groups must also guarantee that only information available before the prediction time is used. Finally, 
+both groups must output probabilities rather than only binary labels. Once these three interface conditions are 
+satisfied, the two modules can be naturally combined. The full team system can therefore be understood as follows: 
+the price-side deep learning module extracts trend and market-structure signals from historical price sequences; 
+the news-side module extracts external event and sentiment signals from financial news; and the logistic regression 
+fusion layer integrates both types of information into one final stock direction classifier.
+
+In summary, the final workflow of the project forms a complete and coherent closed loop. We begin by collecting 
+multi-stock historical price data and relevant market series through yfinance, thereby constructing the raw price 
+database. We then define labels, build time-window-based supervised samples, and perform feature engineering to derive 
+both raw price features and technical indicators. Next, we train and compare the three pure price-based deep learning 
+classifiers—GRU, LSTM, and TCN—under a unified temporal split and standardized evaluation metrics. After that, 
+main_pipeline.py orchestrates the full experimental process and outputs each model's probability predictions together 
+with detailed evaluation results. Finally, under a shared label definition and consistent time alignment, the outputs 
+of the three price models are combined with the probability output from the news module and fed into a logistic regression 
+model, forming the team's final integrated stock movement prediction system.
+
+---
+
+我们最终将整个项目正式定义为一个面向股票短期涨跌预测的深度学习分类系统，任务目标是在给定某只股票过去一段时间的价格信息后，预测下一交易日的方向，
+也就是 up 或 down。整个系统的主线不再以新闻和文本建模为核心，而是以纯 price-based time series classification 为主体，因此我们的工作
+重点将放在数据抓取、时序特征构造、深度学习模型比较、统一评估体系以及最终的工程化 pipeline 搭建上。在整体合作框架中，我们这边负责 price 
+模块，news 组负责 news 模块，最后双方在统一的时间粒度和统一的预测目标上做结果融合，形成整个团队的最终预测系统。
+
+在数据准备阶段，我们首先从 yfinance 抓取目标股票的历史日频数据。数据字段至少包括 Open、High、Low、Close、Adj Close 和 Volume，这些是所
+有后续建模的基础。为了保证样本量和模型稳定性，我们会尽量覆盖较长的时间区间，并同时对多只目标股票进行抓取，从而将单股票时间序列扩展为一个统一的
+多股票样本池。这样做的核心目的是把原始日级记录组织成足够规模的监督学习样本，而不是只停留在单条行情记录层面。与此同时，我们还会抓取与市场环境相
+关的辅助价格序列，例如 SPY、QQQ、^VIX、XLK 这类可以反映大盘、科技板块和市场风险情绪的市场变量。虽然我们的核心任务是 price-only classification，
+但这些外部价格序列本质上仍然属于价格侧信息，因此可以作为辅助时间序列特征纳入系统，而不改变项目“纯价格模型”的定位。
+
+在标签构造阶段，我们会将任务统一定义为一个标准的二分类问题。对于任意股票在时刻 t 的输入样本，我们的预测目标是下一交易日的价格方向，
+也就是根据 t+1 日的收盘价相对于 t 日收盘价的变化来定义标签。如果下一交易日价格上涨，则标签为 1；如果下跌或不涨，则标签为 0。这样的定义简单、
+清晰、易于解释，也最适合作为整个 pipeline 的统一训练目标。为了避免数据泄漏，我们所有输入特征都只能使用预测时刻之前已经可观测到的信息，不能使用
+任何未来信息，这一原则会贯穿数据处理、特征工程、模型训练和最终融合的所有阶段。
+
+在 feature engineering 阶段，我们会从原始 OHLCV 数据中构造适合深度学习时序模型的输入表示。最基础的部分包括日收益率、对数收益率、价格变化率、
+成交量变化率等基础序列特征；进一步还会加入技术指标，例如移动平均线、指数移动平均线、RSI、MACD、Bollinger Bands、ATR、rolling volatility 
+等。这些技术指标的作用不是替代模型学习，而是为模型提供更清晰的局部趋势、波动和超买超卖状态的表达。对于每个样本，我们会采用固定长度的 lookback 
+window，例如过去 20 天或 30 天，将该窗口内的多维价格特征组织成一个时间序列张量，然后用于预测下一天的涨跌方向。市场辅助序列如 SPY、QQQ、^VIX、
+XLK 也会在同样的时间窗口下进行对齐，并以额外特征维度的形式并入输入，从而让模型在学习个股走势的同时，也能感知当期整体市场状态。
+在模型选择上，我们最终将三类主模型正式确定为 GRU、LSTM 和 TCN。选择这三个模型的原因非常明确。LSTM 是最经典的深度学习时序模型之一，能够有效处理
+有时间依赖的金融序列，因此它是本项目不可缺少的标准强基线；GRU 可以看作是更轻量、更高效的循环神经网络结构，在许多中等规模时序任务中，它经常能以更低
+的参数量获得与 LSTM 相近甚至更稳定的表现，因此非常适合纳入比较；TCN 则代表另一条和循环结构不同的时序建模路线，它通过因果卷积和膨胀卷积来建模时间
+依赖，训练更快、梯度传播更稳定，在金融短期预测任务中也具有很强的竞争力。通过同时采用这三个模型，我们不仅能够比较不同结构对价格序列的适配能力，也能
+够让整个项目形成一个清晰且有说服力的模型对照实验框架。
+
+在训练与评估阶段，我们会对三个模型采用完全一致的数据输入形式、完全一致的时间窗口长度、完全一致的训练集与测试集切分规则，从而确保模型比较的公平性。
+由于这是金融时间序列任务，我们不会使用普通的随机划分，而会采用严格的 time-based split，也就是按照时间顺序划分训练集、验证集和测试集，确保模型始
+终是用过去预测未来。对于评估指标，我们会重点使用 Accuracy、Precision、Recall、F1-score 和 ROC-AUC 这几类标准分类指标。其中 Accuracy 可以
+直观反映整体方向判断是否正确，Precision 和 Recall 可以帮助我们分析模型对上涨信号或下跌信号的识别偏好，F1-score 则能够综合反映分类平衡性，ROC-AUC 
+可以用来评估模型输出概率的整体判别能力。最终我们会对三个模型分别输出详细的 metrics，并在统一测试集上进行比较，选出性能最稳定的 price-side 预测模块。
+
+在工程实现层面，我们会将整个系统组织为一个标准化的 main_pipeline.py 入口程序。这个 pipeline 的职责不是只训练一个模型，而是统一调度整个工作流，
+包括数据抓取、数据清洗、特征工程、样本构造、数据切分、模型训练、结果评估和最终输出。换句话说，main_pipeline.py 会成为整个项目的总控模块，使得我
+们可以在同一个入口下完成从原始价格数据到最终分类结果的全流程运行。这样做的最大好处是能够保证代码结构清晰、实验过程可复现、结果输出标准化，也便于后续
+和团队其他模块进行集成。最终系统会将每个模型的预测结果、概率输出、评估指标和对比结果统一保存，为后续的融合阶段做好准备。
+
+在与 news 组的协作和最终融合方案上，我们确定采用简单 logistic regression 作为最终的融合层。这里的核心思想是，price 模块和 news 模块不应该只是
+各自输出一个硬标签再粗糙投票，而应该都输出对“未来上涨”的概率判断。我们这边的三个 price 模型，也就是 GRU、LSTM 和 TCN，都会在同一个时间点、同一个
+股票上输出各自的上涨概率；news 组则在相同时间对齐规则下输出一个 news 概率分数。然后我们将这四个分数作为输入，训练一个 logistic regression，用来
+学习最终的融合决策。这样做的好处是，系统不需要主观假设每个模块的话语权相同，而是可以通过数据自动学习哪个信号更可靠、哪个模块权重更高，从而得到一个更专
+业、更稳健、更可解释的最终融合结果。
+
+从合作接口上讲，这意味着我们和 news 组之间最重要的协调内容不是彼此的内部算法细节，而是统一外部接口。双方必须保证预测目标一致，也就是都在预测同一个股
+票、同一个时刻、同一个未来时间点的涨跌方向；双方必须保证时间窗口一致，也就是都只使用预测时刻之前可获得的信息；双方必须保证输出形式一致，也就是都输出
+概率而不是单纯的 up/down 标签。只要这三个接口定义一致，我们就可以很自然地将两个模块连接起来。最终整个团队系统的结构可以理解为：price-side 深度学
+习模块负责从价格时间序列中抽取趋势信息，news-side 模块负责从 news 中抽取外部事件和市场情绪信息，而 logistic regression 则作为轻量而有效的 
+meta-fusion layer，对这两类信号进行统一整合，输出最终的股票涨跌分类结果。
+
+因此，整个项目的最终工作流程可以概括为这样一个完整闭环：首先从 yfinance 抓取多只股票及相关市场价格数据，构建原始价格数据库；接着完成标签定义和时间
+窗口样本构造，并通过 feature engineering 提取价格序列和技术指标特征；然后分别训练 GRU、LSTM 和 TCN 三个纯价格深度学习分类模型，在统一的时间切
+分和统一的 metrics 下进行严格比较；之后由 main_pipeline.py 统一组织实验流程并输出每个模型的概率预测和详细评估结果；最后与 news 组在统一时间对
+齐和统一标签定义的前提下进行对接，将三个 price 模型的概率输出与 news 模块输出一起送入 logistic regression，形成整个团队的最终融合预测系统。
