@@ -77,56 +77,79 @@ with other modules in the team project. The final system will store each model's
 outputs, evaluation metrics, and comparative summaries in a consistent manner so that the later fusion stage can 
 be implemented smoothly.
 
-For collaboration with the news group and for final system fusion, we have decided to use a simple logistic regression 
-model as the final fusion layer. The key idea is that the price module and the news module should not merely output 
-hard labels and then combine them through a crude voting strategy. Instead, both sides should output probabilities 
-for the event that the stock will go up on the next trading day. On our side, the three price models—GRU, LSTM, and 
-TCN—will each produce an upward-movement probability for the same stock at the same prediction time. The news group 
-will likewise provide a probability score based on aligned news information. These four probability values will then 
-be used as inputs to a logistic regression model, which will learn the final fusion decision. The advantage of this 
-approach is that the system does not need to assume that all modules are equally reliable. Instead, it can learn from 
-data which signals are more trustworthy and assign appropriate weights accordingly, resulting in a final prediction 
-layer that is more professional, more robust, and more interpretable.
+For collaboration with the news group and for final system fusion, we have decided to use a cross-attention mechanism 
+as the final fusion layer, combined with a dual-task output design. The key idea is that the price module and the news 
+module should not merely output hard labels or scalar probabilities and then combine them through a simple weighted 
+scheme. Instead, both sides should output rich feature representations that can be deeply fused through an attention-based 
+mechanism. On our side, the three price encoders—GRU, LSTM, and TCN—will each produce a learned feature vector for the 
+same stock at the same prediction time. These three feature vectors are concatenated and projected through a linear layer 
+into a shared 256-dimensional price representation. This price representation is further combined with the output of a 
+technical indicator MLP to form the complete price-side feature embedding. The news group will likewise provide a 
+771-dimensional feature vector extracted from FinBERT for the same stock and prediction date. The fusion layer then 
+applies cross-attention: the price-side embedding serves as the Query, while the news-side embedding serves as the Key 
+and Value. This design allows the model to selectively attend to the news signals that are most relevant to the observed 
+price context, rather than treating all news information with equal importance. After cross-attention, a residual connection 
+and LayerNorm are applied to stabilize training. The fused representation is then passed into two parallel output heads. 
+The first is a classification head, which predicts the probability of upward movement P(up) ∈ [0,1], trained with binary 
+cross-entropy loss. The second is a regression head, which predicts the expected next-day return r̂, from which the 
+predicted closing price can be recovered as Ĉ_{t+1} = C_t × (1 + r̂), trained with Huber loss. The joint training 
+objective is L = α × L_cls + (1 − α) × L_reg, where α = 0.7 by default. The advantage of this dual-task design is that 
+the classification head focuses on directional accuracy while the regression head provides a continuous magnitude signal, 
+and the shared backbone benefits from both supervisory signals during training.
 
 From the perspective of team coordination, this means that the most important alignment between our group and the news 
 group is not the specific internal modeling details of each side, but rather the consistency of the external interface. 
 Both groups must ensure that they predict the same stock, at the same time point, and for the same future target 
-horizon. Both groups must also guarantee that only information available before the prediction time is used. Finally, 
-both groups must output probabilities rather than only binary labels. Once these three interface conditions are 
+horizon. Both groups must also guarantee that only information available before the prediction time is used. Both 
+groups must output feature vectors rather than only binary labels or scalar probabilities, so that the cross-attention 
+fusion layer can operate on rich representations from both modalities. Once these interface conditions are 
 satisfied, the two modules can be naturally combined. The full team system can therefore be understood as follows: 
 the price-side deep learning module extracts trend and market-structure signals from historical price sequences; 
-the news-side module extracts external event and sentiment signals from financial news; and the logistic regression 
-fusion layer integrates both types of information into one final stock direction classifier.
+the news-side module extracts external event and sentiment signals from financial news via FinBERT; and the 
+cross-attention fusion layer integrates both types of information by allowing the price context to selectively attend 
+to relevant news features, producing a fused representation that feeds into a dual-task output consisting of a direction 
+classifier and a return magnitude predictor.
 
 In summary, the final workflow of the project forms a complete and coherent closed loop. We begin by collecting 
 multi-stock historical price data and relevant market series through yfinance, thereby constructing the raw price 
 database. We then define labels, build time-window-based supervised samples, and perform feature engineering to derive 
 both raw price features and technical indicators. Next, we train and compare the three pure price-based deep learning 
 classifiers—GRU, LSTM, and TCN—under a unified temporal split and standardized evaluation metrics. After that, 
-main_pipeline.py orchestrates the full experimental process and outputs each model's probability predictions together 
-with detailed evaluation results. Finally, under a shared label definition and consistent time alignment, the outputs 
-of the three price models are combined with the probability output from the news module and fed into a logistic regression 
-model, forming the team's final integrated stock movement prediction system.
+main_pipeline.py orchestrates the full experimental process and outputs each model's feature representations together 
+with detailed evaluation results. Finally, under a shared label definition and consistent time alignment, the feature 
+outputs of the three price encoders are concatenated, projected, and combined with the news module's FinBERT feature 
+vector through a cross-attention fusion layer. The fused representation is then decoded by two parallel heads—a 
+classification head predicting P(up) and a regression head predicting the next-day return—forming the team's final 
+integrated stock movement prediction system.
 
-## Logistic regression detail
+## Cross-Attention Fusion and Dual-Task Output Detail
 
-Logistic regression will serve as the final fusion layer of our team's stock prediction system. Its role is not to replace 
-the price models or the news module, but to combine their outputs into one final prediction in a principled and lightweight 
-way. In practice, our three price-side deep learning models, namely GRU, LSTM, and TCN, will each produce a probability 
-score representing the likelihood that a given stock will move up on the next trading day. The news module will also output 
-a corresponding probability score for the same stock, the same prediction date, and the same target label. These four 
-probability values will then be used as the input features of a logistic regression model. In other words, for each sample, 
-the fusion layer will take a vector such as [p_GRU, p_LSTM, p_TCN, p_News] and learn how to combine them to predict the final 
-up/down label. The logistic regression model will automatically learn coefficients for each input signal based on historical 
-training data, which means it can determine how much weight should be given to each price model and how much weight should be 
-given to the news signal. This makes it more suitable than a simple majority vote, because majority vote assumes that all 
-models are equally reliable, while logistic regression can adaptively assign more influence to the stronger signals. From an 
-implementation perspective, the process is straightforward: first, each submodule is trained independently; second, each 
-submodule generates probability outputs on aligned historical samples; third, these outputs are collected into a new fusion 
-dataset along with the true next-day movement labels; and finally, a logistic regression model is trained on this small 
-fusion dataset to produce the final prediction. At inference time, the same workflow is applied: the GRU, LSTM, TCN, and 
-news module each output a probability, and those four values are passed into the trained logistic regression model, which 
-returns the final probability of an upward movement.
+Cross-attention will serve as the final fusion layer of our team's stock prediction system. Its role is not to replace 
+the price models or the news module, but to combine their outputs into one final prediction through a deep, 
+attention-based mechanism that is more expressive than simple linear fusion. In practice, our three price-side deep 
+learning models, namely GRU, LSTM, and TCN, will each produce a learned feature vector representing the encoded 
+price dynamics for a given stock over the lookback window. These three feature vectors are concatenated and projected 
+through a linear layer into a shared 256-dimensional price representation. This is further enriched by combining it 
+with the output of a technical indicator MLP. The news module will also output a 771-dimensional feature vector 
+extracted from FinBERT for the same stock, the same prediction date, and the same target label alignment. The fusion 
+layer then uses cross-attention, where the price-side embedding acts as the Query and the news-side embedding acts as 
+the Key and Value. This mechanism enables the model to learn which aspects of the news information are most relevant 
+given the current price context, effectively allowing the price signal to "query" the news signal for complementary 
+information. After the cross-attention operation, a residual connection followed by LayerNorm is applied to produce 
+the final fused representation. This fused representation is then passed into two parallel output heads. The 
+classification head applies a sigmoid activation to predict P(up) ∈ [0,1], trained with binary cross-entropy loss. 
+The regression head predicts the expected next-day return r̂, from which the predicted closing price can be recovered 
+as Ĉ_{t+1} = C_t × (1 + r̂), trained with Huber loss to be robust against outlier returns. The joint loss function 
+is L = α × L_cls + (1 − α) × L_reg, where α = 0.7 by default. This dual-task design is more powerful than a 
+single-output approach because the classification and regression objectives provide complementary gradient signals: 
+the classification head sharpens the decision boundary for directional prediction, while the regression head 
+encourages the shared representation to capture return magnitude, which in turn improves the quality of the learned 
+features. From an implementation perspective, the process is as follows: first, each submodule (GRU, LSTM, TCN, and 
+news encoder) is trained or fine-tuned independently to produce meaningful feature representations; second, the 
+feature outputs are collected on aligned historical samples; third, the cross-attention fusion layer and dual-task 
+heads are trained end-to-end on the fused features with the joint loss; and at inference time, the same workflow 
+applies—each encoder produces its feature vector, the vectors are fused through cross-attention, and the two output 
+heads produce a direction probability and a predicted return magnitude simultaneously.
 
 ---
 
@@ -139,7 +162,7 @@ returns the final probability of an upward movement.
 有后续建模的基础。为了保证样本量和模型稳定性，我们会尽量覆盖较长的时间区间，并同时对多只目标股票进行抓取，从而将单股票时间序列扩展为一个统一的
 多股票样本池。这样做的核心目的是把原始日级记录组织成足够规模的监督学习样本，而不是只停留在单条行情记录层面。与此同时，我们还会抓取与市场环境相
 关的辅助价格序列，例如 SPY、QQQ、^VIX、XLK 这类可以反映大盘、科技板块和市场风险情绪的市场变量。虽然我们的核心任务是 price-only classification，
-但这些外部价格序列本质上仍然属于价格侧信息，因此可以作为辅助时间序列特征纳入系统，而不改变项目“纯价格模型”的定位。
+但这些外部价格序列本质上仍然属于价格侧信息，因此可以作为辅助时间序列特征纳入系统，而不改变项目"纯价格模型"的定位。
 
 在标签构造阶段，我们会将任务统一定义为一个标准的二分类问题。对于任意股票在时刻 t 的输入样本，我们的预测目标是下一交易日的价格方向，
 也就是根据 t+1 日的收盘价相对于 t 日收盘价的变化来定义标签。如果下一交易日价格上涨，则标签为 1；如果下跌或不涨，则标签为 0。这样的定义简单、
@@ -168,32 +191,43 @@ XLK 也会在同样的时间窗口下进行对齐，并以额外特征维度的�
 们可以在同一个入口下完成从原始价格数据到最终分类结果的全流程运行。这样做的最大好处是能够保证代码结构清晰、实验过程可复现、结果输出标准化，也便于后续
 和团队其他模块进行集成。最终系统会将每个模型的预测结果、概率输出、评估指标和对比结果统一保存，为后续的融合阶段做好准备。
 
-在与 news 组的协作和最终融合方案上，我们确定采用简单 logistic regression 作为最终的融合层。这里的核心思想是，price 模块和 news 模块不应该只是
-各自输出一个硬标签再粗糙投票，而应该都输出对“未来上涨”的概率判断。我们这边的三个 price 模型，也就是 GRU、LSTM 和 TCN，都会在同一个时间点、同一个
-股票上输出各自的上涨概率；news 组则在相同时间对齐规则下输出一个 news 概率分数。然后我们将这四个分数作为输入，训练一个 logistic regression，用来
-学习最终的融合决策。这样做的好处是，系统不需要主观假设每个模块的话语权相同，而是可以通过数据自动学习哪个信号更可靠、哪个模块权重更高，从而得到一个更专
-业、更稳健、更可解释的最终融合结果。
+在与 news 组的协作和最终融合方案上，我们确定采用 cross-attention 机制作为最终的融合层，并结合 dual-task 输出设计。这里的核心思想是，price 模块
+和 news 模块不应该只是各自输出一个标量概率再做简单加权，而应该都输出丰富的特征表示，通过基于注意力的机制进行深度融合。我们这边的三个 price 编码器，
+也就是 GRU、LSTM 和 TCN，都会在同一个时间点、同一个股票上输出各自的特征向量。这三个特征向量被拼接后，通过一个线性层投射到一个共享的 256 维 price 
+表示空间中。该 price 表示进一步与 technical indicator MLP 的输出进行组合，形成完整的价格侧特征嵌入。news 组则在相同时间对齐规则下输出一个 
+771 维的 FinBERT 特征向量。随后融合层使用 cross-attention：价格侧嵌入作为 Query，news 侧嵌入作为 Key 和 Value。这一设计使模型能够选择性地
+关注与当前价格上下文最相关的新闻信号，而不是对所有新闻信息一视同仁。经过 cross-attention 之后，再通过残差连接和 LayerNorm 进行稳定化处理，得到
+最终的融合特征表示。该融合表示随后被送入两个并行的输出头。第一个是分类头，通过 sigmoid 激活预测上涨概率 P(up) ∈ [0,1]，使用 binary 
+cross-entropy loss 进行训练。第二个是回归头，预测下一交易日的预期收益率 r̂，由此可以通过 Ĉ_{t+1} = C_t × (1 + r̂) 还原出预测收盘价，
+使用 Huber loss 进行训练以增强对异常收益的鲁棒性。联合训练目标为 L = α × L_cls + (1 − α) × L_reg，其中 α 默认为 0.7。这种 dual-task 
+设计的好处在于，分类头专注于方向判断的准确性，回归头提供连续的涨跌幅度信号，而共享的 backbone 同时从两种监督信号中受益，从而获得更高质量的特征学习。
 
-从合作接口上讲，这意味着我们和 news 组之间最重要的协调内容不是彼此的内部算法细节，而是统一外部接口。双方必须保证预测目标一致，也就是都在预测同一个股
-票、同一个时刻、同一个未来时间点的涨跌方向；双方必须保证时间窗口一致，也就是都只使用预测时刻之前可获得的信息；双方必须保证输出形式一致，也就是都输出
-概率而不是单纯的 up/down 标签。只要这三个接口定义一致，我们就可以很自然地将两个模块连接起来。最终整个团队系统的结构可以理解为：price-side 深度学
-习模块负责从价格时间序列中抽取趋势信息，news-side 模块负责从 news 中抽取外部事件和市场情绪信息，而 logistic regression 则作为轻量而有效的 
-meta-fusion layer，对这两类信号进行统一整合，输出最终的股票涨跌分类结果。
+从合作接口上讲，这意味着我们和 news 组之间最重要的协调内容不是彼此的内部算法细节，而是统一外部接口。双方必须保证预测目标一致，也就是都在预测同一个
+股票、同一个时刻、同一个未来时间点的涨跌方向；双方必须保证时间窗口一致，也就是都只使用预测时刻之前可获得的信息；双方必须保证输出形式一致，也就是都
+输出特征向量而不是单纯的 up/down 标签或标量概率，以便 cross-attention 融合层能够在丰富的多模态表示上进行操作。只要这三个接口定义一致，我们就
+可以很自然地将两个模块连接起来。最终整个团队系统的结构可以理解为：price-side 深度学习模块负责从价格时间序列中抽取趋势信息，news-side 模块负责从 
+news 中通过 FinBERT 抽取外部事件和市场情绪信息，而 cross-attention 融合层则作为深度且富有表达力的 meta-fusion layer，让价格上下文选择性地
+关注相关新闻特征，产生融合表示后通过 dual-task 输出头同时输出方向分类结果和收益率预测结果。
 
 因此，整个项目的最终工作流程可以概括为这样一个完整闭环：首先从 yfinance 抓取多只股票及相关市场价格数据，构建原始价格数据库；接着完成标签定义和时间
 窗口样本构造，并通过 feature engineering 提取价格序列和技术指标特征；然后分别训练 GRU、LSTM 和 TCN 三个纯价格深度学习分类模型，在统一的时间切
-分和统一的 metrics 下进行严格比较；之后由 main_pipeline.py 统一组织实验流程并输出每个模型的概率预测和详细评估结果；最后与 news 组在统一时间对
-齐和统一标签定义的前提下进行对接，将三个 price 模型的概率输出与 news 模块输出一起送入 logistic regression，形成整个团队的最终融合预测系统。
+分和统一的 metrics 下进行严格比较；之后由 main_pipeline.py 统一组织实验流程并输出每个模型的特征表示和详细评估结果；最后与 news 组在统一时间对
+齐和统一标签定义的前提下进行对接，将三个 price 编码器的特征向量拼接投射后，与 news 模块的 FinBERT 特征向量一起送入 cross-attention 融合层，
+再通过两个并行输出头——分类头预测 P(up) 和回归头预测下一日收益率——形成整个团队的最终融合预测系统。
 
-## Logistic regression detail
+## Cross-Attention 融合与 Dual-Task 输出细节
 
-Logistic regression 将作为我们团队股票预测系统的最终融合层。它的作用并不是替代价格模型或新闻模块，而是以一种更有原则、同时也较为轻量的方式，
-将它们的输出整合为一个最终预测结果。具体来说，我们这边的三个 price-side 深度学习模型，也就是 GRU、LSTM 和 TCN，都会分别输出一个概率分数，用来表示
-某只股票在下一交易日上涨的可能性。与此同时，news 模块也会针对同一只股票、同一个预测日期以及同一个目标标签，输出对应的上涨概率分数。随后，这四个概率值
-将被作为 logistic regression 模型的输入特征。换句话说，对于每一个样本，融合层接收到的输入可以表示为类似 [p_GRU, p_LSTM, p_TCN, p_News] 这样的向量，
-并在此基础上学习如何组合这些信号，从而预测最终的 up/down 标签。Logistic regression 会根据历史训练数据，自动学习每个输入信号对应的系数，这意味着它能够
-判断三个价格模型各自应当占多大权重，以及新闻信号应当占多大权重。正因如此，它比简单的 majority vote 更合适，因为 majority vote 默认所有模型的可靠
-性完全相同，而 logistic regression 则可以根据数据自适应地给予更强信号更大的影响力。从实现流程上看，这个过程也非常直接：首先，各个子模块分别独立完
-成训练；其次，每个子模块在时间对齐后的历史样本上输出对应的概率结果；然后，将这些概率输出与真实的下一日涨跌标签一起整理成一个新的融合数据集；最后，在这
-个较小的融合数据集上训练一个 logistic regression 模型，用于生成最终预测。在推理阶段，也会使用同样的流程：GRU、LSTM、TCN 以及 news 模块分别输出
-各自的概率值，再将这四个值输入到训练好的 logistic regression 模型中，由它输出股票上涨的最终概率。
+Cross-attention 将作为我们团队股票预测系统的最终融合层。它的作用并不是替代价格模型或新闻模块，而是以一种更深层、基于注意力的方式将它们的输出整合
+为最终预测结果，其表达能力远强于简单的线性融合。具体来说，我们这边的三个 price-side 深度学习模型，也就是 GRU、LSTM 和 TCN，都会分别输出一个学
+习到的特征向量，用来表示某只股票在 lookback window 内编码后的价格动态。这三个特征向量被拼接后，通过一个线性层投射到共享的 256 维 price 表示空
+间中，并进一步与 technical indicator MLP 的输出进行组合。与此同时，news 模块也会针对同一只股票、同一个预测日期以及同一个目标标签对齐规则，输出
+一个 771 维的 FinBERT 特征向量。随后融合层使用 cross-attention，其中价格侧嵌入作为 Query，news 侧嵌入作为 Key 和 Value。这一机制使模型能够
+学习在给定当前价格上下文的条件下，新闻信息中哪些方面是最相关的，本质上是让价格信号去"查询"新闻信号以获取互补信息。经过 cross-attention 操作后，
+通过残差连接和 LayerNorm 生成最终的融合特征表示。该融合表示随后被送入两个并行的输出头。分类头通过 sigmoid 激活预测 P(up) ∈ [0,1]，使用 
+binary cross-entropy loss 进行训练。回归头预测下一交易日的预期收益率 r̂，由此可以通过 Ĉ_{t+1} = C_t × (1 + r̂) 还原出预测收盘价，使用 
+Huber loss 进行训练以增强对异常收益的鲁棒性。联合损失函数为 L = α × L_cls + (1 − α) × L_reg，其中 α 默认为 0.7。这种 dual-task 设计
+比单一输出的方式更为强大，因为分类目标和回归目标提供了互补的梯度信号：分类头锐化了方向预测的决策边界，而回归头则鼓励共享表示去捕获收益率幅度信息，
+这反过来又提升了学习到的特征质量。从实现流程上看，这个过程如下：首先，各个子模块（GRU、LSTM、TCN 以及 news 编码器）分别独立完成训练或微调，使其
+能够输出有意义的特征表示；其次，在时间对齐后的历史样本上收集各个子模块的特征输出；然后，cross-attention 融合层和 dual-task 输出头在融合特征上
+使用联合损失进行端到端训练；在推理阶段，也会使用同样的流程——每个编码器输出各自的特征向量，通过 cross-attention 进行融合，两个输出头同时产生方
+向概率和预测收益率。
