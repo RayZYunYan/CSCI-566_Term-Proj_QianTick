@@ -1,4 +1,4 @@
-# Price Prediction and Fusion Plan
+# Price Prediction Task
 
 Our project is now formally defined as a deep learning classification system for short-term stock movement prediction. 
 The primary objective is to predict the direction of a given stock on the next trading day, namely whether the stock will 
