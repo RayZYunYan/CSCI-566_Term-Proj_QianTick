@@ -1,4 +1,4 @@
-# Price Prediction and Fusion Plan
+# Price Prediction Task
 
 Our project is now formally defined as a deep learning classification system for short-term stock movement prediction. 
 The primary objective is to predict the direction of a given stock on the next trading day, namely whether the stock will 
@@ -108,26 +108,6 @@ with detailed evaluation results. Finally, under a shared label definition and c
 of the three price models are combined with the probability output from the news module and fed into a logistic regression 
 model, forming the team's final integrated stock movement prediction system.
 
-## Logistic regression detail
-
-Logistic regression will serve as the final fusion layer of our team's stock prediction system. Its role is not to replace 
-the price models or the news module, but to combine their outputs into one final prediction in a principled and lightweight 
-way. In practice, our three price-side deep learning models, namely GRU, LSTM, and TCN, will each produce a probability 
-score representing the likelihood that a given stock will move up on the next trading day. The news module will also output 
-a corresponding probability score for the same stock, the same prediction date, and the same target label. These four 
-probability values will then be used as the input features of a logistic regression model. In other words, for each sample, 
-the fusion layer will take a vector such as [p_GRU, p_LSTM, p_TCN, p_News] and learn how to combine them to predict the final 
-up/down label. The logistic regression model will automatically learn coefficients for each input signal based on historical 
-training data, which means it can determine how much weight should be given to each price model and how much weight should be 
-given to the news signal. This makes it more suitable than a simple majority vote, because majority vote assumes that all 
-models are equally reliable, while logistic regression can adaptively assign more influence to the stronger signals. From an 
-implementation perspective, the process is straightforward: first, each submodule is trained independently; second, each 
-submodule generates probability outputs on aligned historical samples; third, these outputs are collected into a new fusion 
-dataset along with the true next-day movement labels; and finally, a logistic regression model is trained on this small 
-fusion dataset to produce the final prediction. At inference time, the same workflow is applied: the GRU, LSTM, TCN, and 
-news module each output a probability, and those four values are passed into the trained logistic regression model, which 
-returns the final probability of an upward movement.
-
 ---
 
 我们最终将整个项目正式定义为一个面向股票短期涨跌预测的深度学习分类系统，任务目标是在给定某只股票过去一段时间的价格信息后，预测下一交易日的方向，
@@ -184,16 +164,3 @@ meta-fusion layer，对这两类信号进行统一整合，输出最终的股票
 窗口样本构造，并通过 feature engineering 提取价格序列和技术指标特征；然后分别训练 GRU、LSTM 和 TCN 三个纯价格深度学习分类模型，在统一的时间切
 分和统一的 metrics 下进行严格比较；之后由 main_pipeline.py 统一组织实验流程并输出每个模型的概率预测和详细评估结果；最后与 news 组在统一时间对
 齐和统一标签定义的前提下进行对接，将三个 price 模型的概率输出与 news 模块输出一起送入 logistic regression，形成整个团队的最终融合预测系统。
-
-## Logistic regression detail
-
-Logistic regression 将作为我们团队股票预测系统的最终融合层。它的作用并不是替代价格模型或新闻模块，而是以一种更有原则、同时也较为轻量的方式，
-将它们的输出整合为一个最终预测结果。具体来说，我们这边的三个 price-side 深度学习模型，也就是 GRU、LSTM 和 TCN，都会分别输出一个概率分数，用来表示
-某只股票在下一交易日上涨的可能性。与此同时，news 模块也会针对同一只股票、同一个预测日期以及同一个目标标签，输出对应的上涨概率分数。随后，这四个概率值
-将被作为 logistic regression 模型的输入特征。换句话说，对于每一个样本，融合层接收到的输入可以表示为类似 [p_GRU, p_LSTM, p_TCN, p_News] 这样的向量，
-并在此基础上学习如何组合这些信号，从而预测最终的 up/down 标签。Logistic regression 会根据历史训练数据，自动学习每个输入信号对应的系数，这意味着它能够
-判断三个价格模型各自应当占多大权重，以及新闻信号应当占多大权重。正因如此，它比简单的 majority vote 更合适，因为 majority vote 默认所有模型的可靠
-性完全相同，而 logistic regression 则可以根据数据自适应地给予更强信号更大的影响力。从实现流程上看，这个过程也非常直接：首先，各个子模块分别独立完
-成训练；其次，每个子模块在时间对齐后的历史样本上输出对应的概率结果；然后，将这些概率输出与真实的下一日涨跌标签一起整理成一个新的融合数据集；最后，在这
-个较小的融合数据集上训练一个 logistic regression 模型，用于生成最终预测。在推理阶段，也会使用同样的流程：GRU、LSTM、TCN 以及 news 模块分别输出
-各自的概率值，再将这四个值输入到训练好的 logistic regression 模型中，由它输出股票上涨的最终概率。
