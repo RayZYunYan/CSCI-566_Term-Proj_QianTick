@@ -79,7 +79,7 @@ def download_all_tickers(
     start_date: str = DEFAULT_START_DATE, 
     end_date: str | None = None, 
     interval: str = "1d", 
-    pause: float = 0.5
+    pause: float = 10
 ):
     results = {}
     for i, ticker in enumerate(tickers):
@@ -125,4 +125,3 @@ def fetch_all_stocks(
     date_max = max(df["Date"].max() for df in data.values())
     print(f"fetch_data complete: {len(data)} tickers, {total_rows} total rows, date range"
           f" [{date_min.strftime('%Y-%m-%d')} — {date_max.strftime('%Y-%m-%d')}].")
-    return data

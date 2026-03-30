@@ -1,0 +1,166 @@
+================================================================================
+                    Price Prediction Pipeline – Project Note
+================================================================================
+
+
+1. OVERALL ARCHITECTURE
+================================================================================
+
+    Price Team (Us)                              News Team
+    ===============                              =========
+
+    Raw OHLCV data                               Raw news articles
+         │                                            │
+         ▼                                            ▼
+    Feature Engineering                          FinBERT encoding
+         │                                            │
+         ▼                                            ▼
+    Dataset Builder                              News feature vectors
+    (window + split + normalize)                      │
+         │                                            │
+         ├── X_seq (30-day window) ──→ LSTM ──→ feat_lstm     │
+         │                         ──→ GRU  ──→ feat_gru      │
+         │                         ──→ TCN  ──→ feat_tcn       │
+         │                                                     │
+         └── X_tech (day-t snapshot) ─→ Tech MLP ─→ feat_mlp  │
+                                                     │         │
+                                      concat ────────┘         │
+                                         │                     │
+                                         ▼                     ▼
+                                    Price Features        News Features
+                                         │                     │
+                                         └──────────┬──────────┘
+                                                    ▼
+                                          Cross-Attention Fusion
+                                          (Price=Query, News=Key/Value)
+                                                    │
+                                                    ▼
+                                            Dual-Task Output
+                                            ├── P(up)   classification
+                                            └── r̂       regression
+
+
+2. FILE-BY-FILE: WHAT EACH FILE DOES
+================================================================================
+
+  fetch_data.py            Download raw OHLCV from yfinance
+                           Input:  nothing (uses config)
+                           Output: data/raw/stock/all_stocks.csv
+
+  feature_engineering.py   Compute features from raw prices (NO normalization)
+                           Input:  data/raw/stock/all_stocks.csv
+                           Output: data/processed/stock/features/all_features.csv
+
+  dataset_builder.py       Build supervised learning samples
+                           - Rolling 30-day windows → X_seq
+                           - Day-t tech indicator snapshot → X_tech
+                           - Binary label: next day up=1 / down=0
+                           - Time-based split (train 70% / val 15% / test 15%)
+                           - Normalize using TRAIN-SET stats only (no leakage)
+                           Input:  data/processed/stock/features/all_features.csv
+                           Output: data/processed/stock/dataset/
+                                   ├── train.npz  (X_seq, X_tech, y)
+                                   ├── val.npz
+                                   ├── test.npz
+                                   ├── train_meta.csv  (ticker, as_of_date, target_date)
+                                   ├── val_meta.csv
+                                   ├── test_meta.csv
+                                   └── norm_stats.npz
+
+  lstm_model.py            LSTM sequence model
+  gru_model.py             GRU sequence model
+  tcn_model.py             TCN sequence model
+  tech_indicator_mlp.py    Feedforward net for tech indicators
+                           Each model has two modes:
+                             forward()          → P(up) for classification training
+                             extract_features() → feature vector for fusion
+
+  train_evaluate.py        Training loop + evaluation
+                           - Train each model on train set
+                           - Tune hyperparams on val set
+                           - Report final metrics on test set
+                           - Save best model checkpoints
+
+  fusion_interface.py      Define the output schema for fusion
+                           - Export feature vectors from all 4 models
+                           - Package into format expected by fusion layer
+
+  main_pipeline.py         Central orchestrator
+                           Calls each step in order with boolean flags
+
+
+3. DATA FLOW (step by step)
+================================================================================
+
+  STEP 1: fetch_data
+  ──────────────────
+  yfinance API  ──→  all_stocks.csv
+  (20 tickers, 2018-01-01 ~ today)
+
+  STEP 2: feature_engineering
+  ───────────────────────────
+  all_stocks.csv  ──→  per-ticker: basic features + technical indicators
+                  ──→  all_features.csv  (raw, unnormalized)
+
+  STEP 3: dataset_builder
+  ───────────────────────
+  all_features.csv  ──→  rolling windows + labels
+                    ──→  sort by date globally
+                    ──→  time-based split (train | val | test)
+                    ──→  normalize (fit on train only)
+                    ──→  save .npz files
+
+  STEP 4: train models
+  ─────────────────────
+  train.npz  ──→  LSTM  (input: X_seq)
+             ──→  GRU   (input: X_seq)
+             ──→  TCN   (input: X_seq)
+             ──→  Tech MLP (input: X_tech)
+  val.npz    ──→  early stopping / hyperparameter tuning
+  test.npz   ──→  final evaluation
+
+  STEP 5: extract feature vectors
+  ───────────────────────────────
+  Trained LSTM  .extract_features()  ──→  feat_lstm   per sample
+  Trained GRU   .extract_features()  ──→  feat_gru    per sample
+  Trained TCN   .extract_features()  ──→  feat_tcn    per sample
+  Trained MLP   .extract_features()  ──→  feat_mlp    per sample
+
+  STEP 6: fusion (joint with news team)
+  ─────────────────────────────────────
+  Price features (concat of 4 vectors)  ──→  Query
+  News features  (FinBERT vector)       ──→  Key, Value
+                                        ──→  Cross-Attention
+                                        ──→  P(up) + r̂
+
+
+4. WHAT X_seq AND X_tech ACTUALLY ARE
+================================================================================
+
+  X_seq  shape: (N, 30, 12)
+  ─────
+  A 30-day sliding window of 12 sequence features per day.
+  Fed into LSTM / GRU / TCN (sequence models).
+
+  Features: open_to_prev_close, high_to_prev_close, low_to_prev_close,
+            close_to_prev_close, log_volume, daily_return, log_return,
+            high_low_range, open_close_change, volume_change,
+            close_rolling_mean_20, close_rolling_std_20
+
+  X_tech  shape: (N, 27)
+  ──────
+  A single-day snapshot of 27 technical indicators at day t.
+  Fed into Tech Indicator MLP (feedforward model).
+
+  Features: SMA/EMA (5,10,20), close_vs_SMA/EMA, RSI-14, MACD family,
+            Bollinger Bands (width, %B), ATR, momentum, volume ratio
+
+
+5. ANTI-LEAKAGE RULES
+================================================================================
+
+  ✓  Feature engineering never normalizes — raw features only
+  ✓  Normalization happens AFTER time-based split, using train stats only
+  ✓  Labels use future price (day t+1), inputs use only past (day t and before)
+  ✓  Train/val/test split is strictly chronological, never random
+  ✓  Rolling indicators (SMA, EMA, RSI, etc.) only look backward
