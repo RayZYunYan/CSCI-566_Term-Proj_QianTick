@@ -20,14 +20,3 @@ Stock price movements are influenced by multiple heterogeneous information sourc
 - **Technical indicators** (handcrafted financial signals)
 
 Most traditional approaches rely on a single modality, limiting their ability to capture cross-source interactions. QianTick addresses this limitation by proposing a **multimodal fusion framework** that jointly learns from structured time-series data and unstructured textual data.
-
----
-
-## Key Features
-
-- **Price Modeling**: LSTM-based temporal modeling of OHLCV data  
-- **News Understanding**: FinBERT-based financial text embeddings and sentiment analysis  
-- **Technical Indicators**: RSI, MACD, Bollinger Bands, and other engineered features  
-- **Multimodal Fusion**: Early, late, and hybrid fusion strategies with cross-attention  
-- **Financial Evaluation**: Includes Sharpe ratio, drawdown, and cumulative returns  
-- **Config-Driven Experiments**: All experiments controlled via YAML configuration files  
