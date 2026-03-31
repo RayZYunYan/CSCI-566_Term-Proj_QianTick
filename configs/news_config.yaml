@@ -1,22 +1,42 @@
-# News Line Config (FinBERT-based)
+# News Module Config
+# 所有超参数集中在此，其他三人从此读取，不要在代码里硬编码数字
 
 data:
-  news_window: 7          # 过去 N 天新闻
-  processed_dir: data/processed/news
-  feature_output: data/features/news_features.parquet
+  raw_finnhub: data/processed/news/finnhub_merged.csv
+  raw_gdelt: data/processed/news/gdelt_merged.csv
+  cleaned: data/processed/news/news_cleaned.parquet
+  article_embeddings: data/features/news_article_embeddings.parquet
+  news_features: data/features/news_features.parquet
+  labels: data/features/labels.parquet
 
 model:
   finbert_model: ProsusAI/finbert
-  freeze_bert: true       # 是否冻结 FinBERT 权重
-  aggregation: mean       # 新闻聚合方式: mean | attention
-  hidden_dim: 256         # baseline MLP 隐层维度
+  freeze_bert: true
+  embedding_dim: 768
+  sentiment_dim: 3
+  feature_dim: 771        # embedding_dim + sentiment_dim
+  hidden_dim: 256
+  aggregation: mean       # mean | attention
 
 training:
-  seed: 42
-  epochs: 30
+  news_window: 7          # 过去 N 天新闻聚合窗口
   batch_size: 64
   lr: 1.0e-4
   weight_decay: 1.0e-5
-  scheduler: cosine       # cosine | step | none
+  epochs: 30
   early_stopping_patience: 5
-  checkpoint: checkpoints/news_best.pt
+  seed: 42
+  encoder_checkpoint_every: 10000   # 断点续跑：每编码 N 篇保存一次
+
+split:
+  train_end: "2024-06-30"
+  val_start: "2024-07-01"
+  val_end: "2024-12-31"
+  test_start: "2025-01-01"
+
+output:
+  baseline_dir: outputs/news_baseline/
+  checkpoint: outputs/news_baseline/best_model.pt
+  metrics: outputs/news_baseline/metrics.json
+  predictions: outputs/news_baseline/predictions.parquet
+  training_log: outputs/news_baseline/training_log.csv

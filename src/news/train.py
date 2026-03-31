@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 import numpy as np
 import random
 
-from src.news.dataset import NewsDataset
+from src.news.dataset import NewsFeatureDataset  # 读取预提取的 771 维特征
 from src.news.model import NewsUnimodalBaseline
 
 RANDOM_SEED = 42
