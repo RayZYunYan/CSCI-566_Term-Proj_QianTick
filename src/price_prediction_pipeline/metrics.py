@@ -44,7 +44,7 @@ def compare_model_metrics(
     output_path: str | Path | None = None
 ):
     if (metrics_dir is None):
-        metrics_dir = PROJECT_ROOT / "outputs" / "metrics"
+        metrics_dir = PROJECT_ROOT / "price_prediction_pipeline" / "outputs" / "metrics"
     metrics_dir = Path(metrics_dir)
     if (model_names is None):
         model_names = ["lstm", "gru", "tcn", "tech_mlp"]

@@ -36,8 +36,8 @@ classifier and a return magnitude predictor.
 In summary, the final workflow of the full team system forms a complete and coherent closed loop. We begin by collecting 
 multi-stock historical price data and relevant market series through yfinance, thereby constructing the raw price 
 database. We then define labels, build time-window-based supervised samples, and perform feature engineering to derive 
-both raw price features and technical indicators. Next, we train and compare the three pure price-based deep learning 
-classifiers—GRU, LSTM, and TCN—under a unified temporal split and standardized evaluation metrics. After that, 
+both raw price features and technical indicators. Next, we train and compare four price-based deep learning models—LSTM, GRU, TCN, and Technical Indicator MLP—under 
+a unified temporal split, Bayesian hyperparameter search, and standardized evaluation metrics. After that, 
 main_pipeline.py orchestrates the full experimental process and outputs each model's feature representations together 
 with detailed evaluation results. Finally, under a shared label definition and consistent time alignment, the feature 
 outputs of the three price encoders are concatenated, projected, and combined with the news module's FinBERT feature 
@@ -67,7 +67,7 @@ is L = α × L_cls + (1 − α) × L_reg, where α = 0.7 by default. This dual-t
 single-output approach because the classification and regression objectives provide complementary gradient signals: 
 the classification head sharpens the decision boundary for directional prediction, while the regression head 
 encourages the shared representation to capture return magnitude, which in turn improves the quality of the learned 
-features. From an implementation perspective, the process is as follows: first, each submodule (GRU, LSTM, TCN, and 
+features. From an implementation perspective, the process is as follows: first, each submodule (LSTM, GRU, TCN, Technical Indicator MLP, and 
 news encoder) is trained or fine-tuned independently to produce meaningful feature representations; second, the 
 feature outputs are collected on aligned historical samples; third, the cross-attention fusion layer and dual-task 
 heads are trained end-to-end on the fused features with the joint loss; and at inference time, the same workflow 
@@ -95,9 +95,10 @@ news 中通过 FinBERT 抽取外部事件和市场情绪信息，而 cross-atten
 关注相关新闻特征，产生融合表示后通过 dual-task 输出头同时输出方向分类结果和收益率预测结果。
 
 因此，整个项目的最终工作流程可以概括为这样一个完整闭环：首先从 yfinance 抓取多只股票及相关市场价格数据，构建原始价格数据库；接着完成标签定义和时间
-窗口样本构造，并通过 feature engineering 提取价格序列和技术指标特征；然后分别训练 GRU、LSTM 和 TCN 三个纯价格深度学习分类模型，在统一的时间切
-分和统一的 metrics 下进行严格比较；之后由 main_pipeline.py 统一组织实验流程并输出每个模型的特征表示和详细评估结果；最后与 news 组在统一时间对
-齐和统一标签定义的前提下进行对接，将三个 price 编码器的特征向量拼接投射后，与 news 模块的 FinBERT 特征向量一起送入 cross-attention 融合层，
+窗口样本构造，并通过 feature engineering 提取价格序列和技术指标特征；然后训练 LSTM、GRU、TCN 和 Technical Indicator MLP 四个价格侧模型，每个模型都使用 Bayesian 超参搜索 + early stopping，在统一的
+时间切分和统一的 metrics 下进行严格比较；之后由 main_pipeline.py 统一组织实验流程并输出每个模型的特征表示和详细评估结果；最后与 news 组在统一
+时间对齐和统一标签定义的前提下进行对接，将三个序列编码器的特征向量拼接投射后与 Tech MLP 特征组合，再与 news 模块的 FinBERT 特征向量一起送入 
+cross-attention 融合层，
 再通过两个并行输出头——分类头预测 P(up) 和回归头预测下一日收益率——形成整个团队的最终融合预测系统。
 
 ## Cross-Attention 融合与 Dual-Task 输出细节
@@ -112,7 +113,7 @@ Cross-attention 将作为我们团队股票预测系统的最终融合层。它�
 binary cross-entropy loss 进行训练。回归头预测下一交易日的预期收益率 r̂，由此可以通过 Ĉ_{t+1} = C_t × (1 + r̂) 还原出预测收盘价，使用 
 Huber loss 进行训练以增强对异常收益的鲁棒性。联合损失函数为 L = α × L_cls + (1 − α) × L_reg，其中 α 默认为 0.7。这种 dual-task 设计
 比单一输出的方式更为强大，因为分类目标和回归目标提供了互补的梯度信号：分类头锐化了方向预测的决策边界，而回归头则鼓励共享表示去捕获收益率幅度信息，
-这反过来又提升了学习到的特征质量。从实现流程上看，这个过程如下：首先，各个子模块（GRU、LSTM、TCN 以及 news 编码器）分别独立完成训练或微调，使其
+这反过来又提升了学习到的特征质量。从实现流程上看，这个过程如下：首先，各个子模块（LSTM、GRU、TCN、Technical Indicator MLP 以及 news 编码器）分别独立完成训练或微调，使其
 能够输出有意义的特征表示；其次，在时间对齐后的历史样本上收集各个子模块的特征输出；然后，cross-attention 融合层和 dual-task 输出头在融合特征上
 使用联合损失进行端到端训练；在推理阶段，也会使用同样的流程——每个编码器输出各自的特征向量，通过 cross-attention 进行融合，两个输出头同时产生方
 向概率和预测收益率。
