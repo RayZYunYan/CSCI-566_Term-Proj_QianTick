@@ -5,12 +5,11 @@ import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 from sklearn.metrics import roc_auc_score
-import optuna # for Bayesian hyperparameter optimization
+import optuna # For Bayesian hyperparameter optimization
 from dataset_builder import load_dataset
 from metrics import compute_classification_metrics, save_metrics
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-
 ACTIVATION_REGISTRY = {"relu": nn.ReLU, "gelu": nn.GELU, "silu": nn.SiLU}
 
 class LSTMClassifier(nn.Module):
@@ -52,7 +51,7 @@ class EarlyStopping:
         self.counter = 0
         self.best_score: float | None = None
         self.should_stop = False
-        self._best_state: dict | None = None
+        self.best_state: dict | None = None
 
     def step(self, score: float, model: nn.Module):
         if (self.best_score is None or score > self.best_score + self.min_delta):
@@ -60,15 +59,15 @@ class EarlyStopping:
             self.counter = 0
             # Save the current model's parameters in their entirety, designating them as the best model state to date.
             # This will cover the previous best model's parameters, ensuring that we always have the most up-to-date best model state saved.
-            self._best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+            self.best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
         else:
             self.counter += 1
             if (self.counter >= self.patience):
                 self.should_stop = True
 
     def restore_best(self, model: nn.Module):
-        if (self._best_state is not None):
-            model.load_state_dict(self._best_state)
+        if (self.best_state is not None):
+            model.load_state_dict(self.best_state)
 
 def make_loader(X: np.ndarray, y: np.ndarray, batch_size: int, shuffle: bool = True):
     ds = TensorDataset(torch.from_numpy(X), torch.from_numpy(y).float())
@@ -251,7 +250,7 @@ def train_lstm(
 
     # Save best hyperparams
     with open(model_dir / "lstm_best_params.json", "w") as f:
-        json.dump({"bestval_roc_auc": study.best_value, **best}, f, indent=2)
+        json.dump({"best_val_roc_auc": study.best_value, **best}, f, indent=2)
 
     # Retrain final model with best params
     final_model = LSTMClassifier(input_dim, best["hidden_dim"], best["num_layers"], best["dropout"], best["activation"]).to(device)
@@ -269,7 +268,7 @@ def train_lstm(
     y_pred = (y_prob >= 0.5).astype(int)
     test_metrics = compute_classification_metrics(y_true, y_pred, y_prob)
     test_metrics["best_params"] = best
-    test_metrics["bestval_roc_auc"] = study.best_value
+    test_metrics["best_val_roc_auc"] = study.best_value
 
     metrics_path = metrics_dir / "lstm_metrics.json"
     save_metrics(test_metrics, metrics_path)

@@ -1,166 +1,307 @@
 ================================================================================
-                    Price Prediction Pipeline – Project Note
+              Price Prediction Pipeline — 项目工程指南
 ================================================================================
 
 
-1. OVERALL ARCHITECTURE
+一、整体架构图
 ================================================================================
 
-    Price Team (Us)                              News Team
-    ===============                              =========
+  我们（Price 组）                                News 组
+  ================                                =======
 
-    Raw OHLCV data                               Raw news articles
-         │                                            │
-         ▼                                            ▼
-    Feature Engineering                          FinBERT encoding
-         │                                            │
-         ▼                                            ▼
-    Dataset Builder                              News feature vectors
-    (window + split + normalize)                      │
-         │                                            │
-         ├── X_seq (30-day window) ──→ LSTM ──→ feat_lstm     │
-         │                         ──→ GRU  ──→ feat_gru      │
-         │                         ──→ TCN  ──→ feat_tcn       │
-         │                                                     │
-         └── X_tech (day-t snapshot) ─→ Tech MLP ─→ feat_mlp  │
-                                                     │         │
-                                      concat ────────┘         │
-                                         │                     │
-                                         ▼                     ▼
-                                    Price Features        News Features
-                                         │                     │
-                                         └──────────┬──────────┘
-                                                    ▼
-                                          Cross-Attention Fusion
-                                          (Price=Query, News=Key/Value)
-                                                    │
-                                                    ▼
-                                            Dual-Task Output
-                                            ├── P(up)   classification
-                                            └── r̂       regression
+  yfinance 原始 OHLCV                             新闻文本
+        │                                              │
+        ▼                                              ▼
+  ① fetch_data.py                                 GDELT / Finnhub 数据采集
+        │                                              │
+        ▼                                              ▼
+  ② feature_engineering.py                        FinBERT 编码
+     （不做归一化）                                      │
+        │                                              ▼
+        ▼                                         feat_news (FinBERT 特征向量)
+  ③ dataset_builder.py                                 │
+     构建滑动窗口 + 标签                                │
+     按时间切分 train/val/test                          │
+     仅用 train set 做归一化                            │
+        │                                              │
+        ├── X_seq  (30天窗口) ─→ ④ lstm_model.py       │
+        │                    ─→ ④ gru_model.py         │
+        │                    ─→ ④ tcn_model.py         │
+        │                                              │
+        └── X_tech (当日快照) ─→ ④ tech_indicator_mlp.py
+                                      │                │
+                 ┌────────────────────┘                │
+                 │  4个模型各自输出:                      │
+                 │   · P(up) 分类概率                    │
+                 │   · feature vector 特征向量           │
+                 │                                      │
+                 ▼                                      │
+  ⑤ fusion_interface.py                                │
+     导出所有特征向量 + metadata                         │
+     打包成 fusion 层要求的格式                          │
+                 │                                      │
+                 └──────────────┬────────────────────────┘
+                                ▼
+                     Cross-Attention Fusion
+                     （Price=Query, News=Key/Value）
+                                │
+                                ▼
+                        Dual-Task 输出
+                        ├── P(up)   分类（涨/跌）
+                        └── r̂       回归（预测收益率）
 
 
-2. FILE-BY-FILE: WHAT EACH FILE DOES
+二、执行顺序与阶段依赖
 ================================================================================
 
-  fetch_data.py            Download raw OHLCV from yfinance
-                           Input:  nothing (uses config)
-                           Output: data/raw/stock/all_stocks.csv
+  阶段 A：数据准备（无任何模型参与）
+  ──────────────────────────────
+  ① fetch_data.py  →  ② feature_engineering.py  →  ③ dataset_builder.py
+  完成后产出: train.npz / val.npz / test.npz（归一化后的监督学习样本）
 
-  feature_engineering.py   Compute features from raw prices (NO normalization)
-                           Input:  data/raw/stock/all_stocks.csv
-                           Output: data/processed/stock/features/all_features.csv
+  阶段 B：模型训练与评估（4个模型独立且可并行）
+  ──────────────────────────────────────────
+  ④ lstm_model.py      读取 train.npz → Bayesian超参搜索 → 训练 → 评估 → 保存
+  ④ gru_model.py       同上
+  ④ tcn_model.py       同上
+  ④ tech_indicator_mlp.py   同上（但输入是 X_tech 而非 X_seq）
 
-  dataset_builder.py       Build supervised learning samples
-                           - Rolling 30-day windows → X_seq
-                           - Day-t tech indicator snapshot → X_tech
-                           - Binary label: next day up=1 / down=0
-                           - Time-based split (train 70% / val 15% / test 15%)
-                           - Normalize using TRAIN-SET stats only (no leakage)
-                           Input:  data/processed/stock/features/all_features.csv
-                           Output: data/processed/stock/dataset/
-                                   ├── train.npz  (X_seq, X_tech, y)
-                                   ├── val.npz
-                                   ├── test.npz
-                                   ├── train_meta.csv  (ticker, as_of_date, target_date)
-                                   ├── val_meta.csv
-                                   ├── test_meta.csv
-                                   └── norm_stats.npz
+  ⑤ metrics.py 被每个模型文件内部调用，计算 ROC-AUC / Accuracy / F1 等指标
 
-  lstm_model.py            LSTM sequence model
-  gru_model.py             GRU sequence model
-  tcn_model.py             TCN sequence model
-  tech_indicator_mlp.py    Feedforward net for tech indicators
-                           Each model has two modes:
-                             forward()          → P(up) for classification training
-                             extract_features() → feature vector for fusion
+  阶段 C：特征向量导出（为 Fusion 做准备）
+  ──────────────────────────────────────
+  ⑤ fusion_interface.py
+     · 加载 4 个训练好的模型
+     · 调用每个模型的 extract_features()
+     · 把 4 组特征向量 + metadata 打包导出
+     · 这一步的输出就是交给 News 组做 Fusion 的"接口文件"
 
-  train_evaluate.py        Training loop + evaluation
-                           - Train each model on train set
-                           - Tune hyperparams on val set
-                           - Report final metrics on test set
-                           - Save best model checkpoints
-
-  fusion_interface.py      Define the output schema for fusion
-                           - Export feature vectors from all 4 models
-                           - Package into format expected by fusion layer
-
-  main_pipeline.py         Central orchestrator
-                           Calls each step in order with boolean flags
+  阶段 D：Fusion（与 News 组联合完成，不在我们 pipeline 内）
+  ──────────────────────────────────────────────────────
+  由 src/fusion/ 目录下的代码完成，不需要我们写
 
 
-3. DATA FLOW (step by step)
+三、每个文件的职责
 ================================================================================
 
-  STEP 1: fetch_data
+  fetch_data.py
+  ─────────────
+  通过 yfinance API 下载 20 只股票从 2018-01-01 至今的每日 OHLCV 数据。
+  输出 data/raw/stock/all_stocks.csv，包含 Date, Ticker, Open, High, Low,
+  Close, Adj Close, Volume 这些列。这是整个 pipeline 的起点。
+
+  feature_engineering.py
+  ──────────────────────
+  读取 all_stocks.csv，对每个 ticker 独立计算两组特征：
+    · 序列特征（12个）: 每日价格变化率、对数收益率、波动率等
+    · 技术指标（27个）: SMA/EMA、RSI、MACD、布林带、ATR、动量等
+  重要：这一步绝不做归一化，只输出原始特征值。
+  输出 data/processed/stock/features/all_features.csv。
+
+  dataset_builder.py
   ──────────────────
-  yfinance API  ──→  all_stocks.csv
-  (20 tickers, 2018-01-01 ~ today)
+  读取 all_features.csv，完成以下工作：
+    · 对每个 ticker 构建 30 天的滑动窗口 → X_seq (N, 30, 12)
+    · 提取每个样本 day t 当天的技术指标快照 → X_tech (N, 27)
+    · 生成二分类标签：明天收盘价 > 今天收盘价 = 1，否则 = 0
+    · 全部样本按日期排序后，按 70%/15%/15% 做时间切分
+    · 仅用 train set 计算 mean/std，再统一 apply 到 val 和 test
+    · 保存 metadata（ticker, as_of_date, target_date）方便后续回溯
+  输出到 data/processed/stock/dataset/：
+    train.npz, val.npz, test.npz    → 包含 X_seq, X_tech, y
+    train_meta.csv, val_meta.csv, test_meta.csv
+    norm_stats.npz                   → 归一化参数（推理时复用）
 
-  STEP 2: feature_engineering
-  ───────────────────────────
-  all_stocks.csv  ──→  per-ticker: basic features + technical indicators
-                  ──→  all_features.csv  (raw, unnormalized)
+  lstm_model.py
+  ─────────────
+  定义 LSTMClassifier 模型（PyTorch），内含两个模式：
+    · forward(x) → P(up) 的 logit，用于分类训练
+    · extract_features(x) → 分类头之前的隐藏向量，用于 Fusion
+  训练流程全部封装在 train_lstm() 函数中：
+    · 使用 Optuna 做 Bayesian 超参搜索（hidden_dim, layers, dropout, lr,
+      batch_size, weight_decay, 激活函数）
+    · 每个 trial 内部有 early stopping（监控 val ROC-AUC）
+    · 搜索完成后用最佳参数重新训练 final model
+    · 在 test set 上评估并保存 metrics
+  额外提供 load / predict / extract_features 三个独立函数，
+  供 fusion_interface.py 和后续步骤调用。
+  输出: outputs/models/lstm_best.pt, outputs/metrics/lstm_metrics.json
 
-  STEP 3: dataset_builder
-  ───────────────────────
-  all_features.csv  ──→  rolling windows + labels
-                    ──→  sort by date globally
-                    ──→  time-based split (train | val | test)
-                    ──→  normalize (fit on train only)
-                    ──→  save .npz files
+  gru_model.py
+  ────────────
+  与 lstm_model.py 结构完全一致，区别是编码器换成 GRU。
+  GRU 比 LSTM 更轻量、训练更快，作为 recurrent baseline。
+  同样提供 forward() + extract_features() 双模式。
 
-  STEP 4: train models
+  tcn_model.py
+  ────────────
+  与 lstm_model.py 结构一致，但编码器换成 Temporal Convolutional Network。
+  使用因果卷积 + 膨胀卷积来捕获长距离时间依赖，不依赖循环结构。
+  同样提供 forward() + extract_features() 双模式。
+
+  tech_indicator_mlp.py
   ─────────────────────
-  train.npz  ──→  LSTM  (input: X_seq)
-             ──→  GRU   (input: X_seq)
-             ──→  TCN   (input: X_seq)
-             ──→  Tech MLP (input: X_tech)
-  val.npz    ──→  early stopping / hyperparameter tuning
-  test.npz   ──→  final evaluation
+  一个前馈全连接网络，输入是 X_tech (27个技术指标的当日快照)。
+  与序列模型不同，它不处理时间窗口，只看 day t 这一天的技术指标。
+  同样提供 forward() + extract_features() 双模式。
+  它的 feature vector 会和三个序列模型的 feature vector 一起送入 Fusion。
 
-  STEP 5: extract feature vectors
-  ───────────────────────────────
-  Trained LSTM  .extract_features()  ──→  feat_lstm   per sample
-  Trained GRU   .extract_features()  ──→  feat_gru    per sample
-  Trained TCN   .extract_features()  ──→  feat_tcn    per sample
-  Trained MLP   .extract_features()  ──→  feat_mlp    per sample
+  为什么需要单独的 Tech MLP（设计决策说明）:
+  X_tech 是 shape (N, 27) 的二维向量，而 LSTM/GRU/TCN 要求的输入是 shape
+  (N, 30, 12) 的三维时间窗口，维度和语义都对不上，因此 X_tech 无法直接喂给
+  序列模型。虽然理论上可以把 X_tech 复制 30 份拼到 X_seq 后面绕过这个限制，
+  但这样做会模糊两组特征的语义边界。更重要的是，X_seq 捕获的是价格在 30 天
+  内的"动态变化模式"（趋势、动量反转、波动率聚集），而 X_tech 捕获的是 day t
+  当天的"市场状态"（RSI 是否超买、价格在布林带的位置、MACD 是否金叉）——
+  这些技术指标内部已经包含了历史回看（如 RSI-14 看过去 14 天），不需要再通过
+  时间窗口建模。从纯预测能力看，一个浅层 MLP 对 27 个技术指标做二分类本质上
+  接近一个高级逻辑回归，它单独的预测力不会比序列模型更强。Tech MLP 真正的
+  价值在于架构层面：cross-attention fusion 层要求所有输入都是经过学习的 feature
+  vector（而非原始数值），Tech MLP 负责把 27 个原始指标值投射到一个与序列模型
+  输出维度对齐的、经过非线性变换的特征空间里，让 fusion 层的 attention 机制能
+  统一处理。如果没有这一步，fusion 层收到的将是一半 learned embedding 一半
+  raw features，表示空间不一致会影响 attention 的效果。
 
-  STEP 6: fusion (joint with news team)
-  ─────────────────────────────────────
-  Price features (concat of 4 vectors)  ──→  Query
-  News features  (FinBERT vector)       ──→  Key, Value
-                                        ──→  Cross-Attention
-                                        ──→  P(up) + r̂
+  metrics.py
+  ──────────
+  所有模型共用的评估工具。不负责训练，只负责算分数。
+    · compute_classification_metrics() → ROC-AUC, Accuracy, F1, Precision, Recall
+    · save_metrics() / load_metrics()  → JSON 持久化
+    · compare_model_metrics()          → 读取所有模型的 JSON，生成对比表
+
+  fusion_interface.py
+  ───────────────────
+  这个文件不训练任何模型，它的职责是：
+    · 加载已训练好的 4 个模型（LSTM, GRU, TCN, Tech MLP）
+    · 对 test set（或指定 split）的每个样本调用 extract_features()
+    · 把 4 组特征向量导出为 .pt 或 .npy 文件
+    · 同时导出一份 metadata CSV（ticker, as_of_date, target_date, 各模型的 P(up)）
+  这份导出文件就是我们交给 Fusion 层 / News 组的"合同"。
+
+  main_pipeline.py
+  ────────────────
+  唯一的执行入口，通过 bool 开关按顺序调用每一步：
+    fetch → feature_engineering → dataset_builder → train_lstm → ...
+  所有其他文件都不能独立运行，必须由 main_pipeline.py 统一调度。
 
 
-4. WHAT X_seq AND X_tech ACTUALLY ARE
+四、X_seq 和 X_tech 分别是什么
 ================================================================================
 
-  X_seq  shape: (N, 30, 12)
-  ─────
-  A 30-day sliding window of 12 sequence features per day.
-  Fed into LSTM / GRU / TCN (sequence models).
-
-  Features: open_to_prev_close, high_to_prev_close, low_to_prev_close,
-            close_to_prev_close, log_volume, daily_return, log_return,
-            high_low_range, open_close_change, volume_change,
-            close_rolling_mean_20, close_rolling_std_20
-
-  X_tech  shape: (N, 27)
+  X_seq — shape: (N, 30, 12)
   ──────
-  A single-day snapshot of 27 technical indicators at day t.
-  Fed into Tech Indicator MLP (feedforward model).
+  过去 30 个交易日的 12 个序列特征组成的时间窗口。
+  喂给 LSTM / GRU / TCN 这三个序列模型。
+  包含: 对前日收盘的价格变化率（open/high/low/close）、对数成交量、
+       日收益率、对数收益率、日内波幅、开收差、成交量变化率、
+       20日均线偏离度、20日波动率比。
 
-  Features: SMA/EMA (5,10,20), close_vs_SMA/EMA, RSI-14, MACD family,
-            Bollinger Bands (width, %B), ATR, momentum, volume ratio
+  X_tech — shape: (N, 27)
+  ──────
+  day t 当天的 27 个技术指标快照，是一个一维向量而非时间序列。
+  喂给 Tech Indicator MLP 这个前馈模型。
+  包含: SMA/EMA (5,10,20天)、价格相对均线偏离度、RSI-14、
+       MACD 三件套、布林带 (宽度/%B)、ATR/ATR比率、
+       10日动量、成交量比率。
 
 
-5. ANTI-LEAKAGE RULES
+五、与 News 组的 Fusion 对接——我们需要准备什么
 ================================================================================
 
-  ✓  Feature engineering never normalizes — raw features only
-  ✓  Normalization happens AFTER time-based split, using train stats only
-  ✓  Labels use future price (day t+1), inputs use only past (day t and before)
-  ✓  Train/val/test split is strictly chronological, never random
-  ✓  Rolling indicators (SMA, EMA, RSI, etc.) only look backward
+  Fusion 层（cross-attention + dual-task）不是我们写的，它在 src/fusion/ 里。
+  但我们必须把"接口"准备好。具体来说，我们需要导出以下内容：
+
+  1. 四组特征向量文件（对齐到同一批样本）
+     · outputs/features/lstm_features.pt     shape (N, hidden_dim)
+     · outputs/features/gru_features.pt      shape (N, hidden_dim)
+     · outputs/features/tcn_features.pt      shape (N, hidden_dim)
+     · outputs/features/tech_mlp_features.pt shape (N, tech_hidden_dim)
+
+  2. 一份 metadata CSV
+     · outputs/predictions/price_model_outputs.csv
+     · 包含: ticker, as_of_date, target_date, true_label,
+            p_up_lstm, p_up_gru, p_up_tcn
+
+  3. 对齐规则（必须与 News 组完全一致）
+     · 预测目标: 下一个交易日的收盘价是否上涨（二分类）
+     · 时间定义: as_of_date = 做出预测的那天 (day t)
+                target_date = 被预测的那天 (day t+1)
+     · 信息边界: 只能用 day t 及之前的信息，不能用未来数据
+
+  News 组需要按同样的 (ticker, as_of_date, target_date) 对齐规则，
+  输出一个 feat_news 特征向量。然后 Fusion 层会：
+     · 把 [feat_lstm, feat_gru, feat_tcn] 拼接 → 线性投射 → 加上 feat_tech_mlp
+       → 完整的 price-side embedding → 作为 Query
+     · feat_news → 作为 Key 和 Value
+     · Cross-Attention → 残差连接 → LayerNorm → 融合表示
+     · 分类头 → P(up)，回归头 → 预测收益率 r̂
+     · 联合损失: L = 0.7 × L_cls + 0.3 × L_reg
+
+
+六、单个模型的训练流程（以 LSTM 为例，GRU / TCN / Tech MLP 完全相同）
+================================================================================
+
+  每个模型文件（如 lstm_model.py）的 train_lstm() 函数包含完整的三阶段流程：
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │ 阶段 1：Bayesian 超参搜索（Optuna TPE, 默认 50 个 trial）     │
+  │                                                              │
+  │   搜索空间:                                                   │
+  │     · hidden_dim    : [32, 64, 128, 256]                     │
+  │     · num_layers    : [1, 2, 3]                              │
+  │     · dropout       : [0.1 ~ 0.5]                            │
+  │     · learning_rate : [1e-4 ~ 1e-2]  (对数刻度)              │
+  │     · batch_size    : [64, 128, 256, 512]                    │
+  │     · weight_decay  : [1e-6 ~ 1e-3]  (对数刻度)              │
+  │     · activation    : [relu, gelu, silu]                     │
+  │                                                              │
+  │   每个 trial:                                                 │
+  │     · 用采样出的超参数构建模型                                  │
+  │     · 在 train set 上训练（最多 50 epochs）                   │
+  │     · 每个 epoch 结束后在 val set 上算 ROC-AUC                │
+  │     · early stopping: 如果 val ROC-AUC 连续 15 个 epoch       │
+  │       不再提升，提前终止这个 trial                              │
+  │     · MedianPruner: 如果表现低于其他 trial 的中位数，           │
+  │       Optuna 直接砍掉这个 trial，节省时间                      │
+  │     · 返回该 trial 的最佳 val ROC-AUC 给 Optuna               │
+  │                                                              │
+  │   50 个 trial 结束后，Optuna 选出 val ROC-AUC 最高的超参组合   │
+  └──────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+  ┌─────────────────────────────────────────────────────────────┐
+  │ 阶段 2：用最佳超参数重新训练 Final Model                       │
+  │                                                              │
+  │   · 用搜索出的最佳超参数创建新模型                              │
+  │   · 在 train set 上训练（最多 200 epochs，比搜索时更长）        │
+  │   · 同样有 early stopping（patience=15, 监控 val ROC-AUC）    │
+  │   · EarlyStopping 内部始终保存当前最佳 epoch 的模型权重         │
+  │   · 训练结束后恢复到那个最佳 epoch 的状态                       │
+  │                                                              │
+  │   保存:                                                       │
+  │     outputs/models/lstm_best.pt           （模型权重+超参数）   │
+  │     outputs/models/lstm_best_params.json  （超参数记录）        │
+  └──────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+  ┌─────────────────────────────────────────────────────────────┐
+  │ 阶段 3：在 test set 上做最终评估                               │
+  │                                                              │
+  │   · 调用 metrics.py 的 compute_classification_metrics()       │
+  │   · 计算: ROC-AUC, Accuracy, F1, Precision, Recall           │
+  │   · 生成 confusion matrix                                    │
+  │                                                              │
+  │   保存:                                                       │
+  │     outputs/metrics/lstm_metrics.json     （完整评估报告）      │
+  └─────────────────────────────────────────────────────────────┘
+
+  关于 metrics.py 的调用时机:
+    · 训练过程中（每个 epoch）: 只算 sklearn 的 roc_auc_score（轻量快速）
+      用于 early stopping 判断和 Optuna 搜索方向
+    · 训练完成后（仅一次）: 调用 metrics.py 的完整函数
+      输出包含所有指标的 JSON 报告
+
+  训练完成后如何复用模型（不需要重新训练）:
+    · load_lstm_model(path)           → 加载已保存的最佳模型
+    · predict_lstm(path, split)       → 用已保存模型做预测
+    · extract_lstm_features(path)     → 用已保存模型提取特征向量给 Fusion
