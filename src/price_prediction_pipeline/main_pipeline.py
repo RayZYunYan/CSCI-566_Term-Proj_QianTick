@@ -64,4 +64,12 @@ def price_prediction_task(
 
 if __name__ == "__main__":
     data_preprocessing(if_fetch_data=False, if_feature_engineering=False, if_build_dataset=False)
-    price_prediction_task(if_train_lstm=False, if_train_gru=False, if_train_tcn=False)
+    price_prediction_task(
+        if_train_lstm=True, 
+        if_train_gru=True, 
+        if_train_tcn=False, 
+        n_trials=50, 
+        max_epochs_per_trial=60, 
+        max_epochs_final=300, 
+        patience=20
+    )

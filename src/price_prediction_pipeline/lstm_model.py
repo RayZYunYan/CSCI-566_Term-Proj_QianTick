@@ -118,8 +118,9 @@ def val_roc_auc(model, loader, device):
     except ValueError:
         return 0.0
 
-def train_full(model, train_loader, val_loader, lr, weight_decay, max_epochs, patience, device, trial=None, verbose=True):
-    criterion = nn.BCEWithLogitsLoss()
+def train_full(model, train_loader, val_loader, lr, weight_decay, max_epochs, patience, device, pos_weight=None, trial=None, verbose=True):
+    # Use class-weighted loss to prevent prediction bias toward the majority class.
+    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     # ReduceLROnPlateau scheduler will reduce the learning rate by a factor of 0.5 if the validation 
     # ROC-AUC does not improve for a certain number of epochs (patience // 3).
@@ -196,7 +197,7 @@ def train_lstm(
     if (data_dir is None):
         data_dir = PROJECT_ROOT / "data" / "processed" / "stock" / "dataset"
     if (output_dir is None):
-        output_dir = PROJECT_ROOT / "price_prediction_pipeline" / "outputs"
+        output_dir = PROJECT_ROOT / "src" / "price_prediction_pipeline" / "outputs"
     data_dir, output_dir = Path(data_dir), Path(output_dir)
     model_dir = output_dir / "models"
     metrics_dir = output_dir / "metrics"
@@ -212,6 +213,11 @@ def train_lstm(
     X_val, y_val = splits["val"]["X"], splits["val"]["y"]
     X_test, y_test = splits["test"]["X"], splits["test"]["y"]
     input_dim = X_train.shape[2]
+
+    # Compute class weight to prevent the model from biasing toward the majority class.
+    n_pos = float(y_train.sum())
+    n_neg = float(len(y_train) - n_pos)
+    pos_weight = torch.tensor([n_neg / n_pos], dtype=torch.float32).to(device)
     
     # Optuna search
     # Only show warnings and errors from Optuna, not info/debug logs, to reduce clutter during hyperparameter optimization.
@@ -219,10 +225,10 @@ def train_lstm(
 
     def objective(trial):
         hp = {
-            "hidden_dim": trial.suggest_categorical("hidden_dim", [32, 64, 128, 256]), 
+            "hidden_dim": trial.suggest_categorical("hidden_dim", [64, 128, 256, 512]), 
             "num_layers": trial.suggest_int("num_layers", 1, 3), 
             "dropout": trial.suggest_float("dropout", 0.1, 0.5), 
-            "lr": trial.suggest_float("lr", 1e-4, 1e-2, log=True), 
+            "lr": trial.suggest_float("lr", 5e-5, 5e-3, log=True), 
             "batch_size": trial.suggest_categorical("batch_size", [64, 128, 256, 512]), 
             "weight_decay": trial.suggest_float("weight_decay", 1e-6, 1e-3, log=True), 
             "activation": trial.suggest_categorical("activation", ["relu", "gelu", "silu"])
@@ -231,7 +237,7 @@ def train_lstm(
         train_loader = make_loader(X_train, y_train, hp["batch_size"], shuffle=True)
         val_loader = make_loader(X_val, y_val, hp["batch_size"], shuffle=False)
         return train_full(
-            model, train_loader, val_loader, hp["lr"], hp["weight_decay"], max_epochs_per_trial, patience, device, trial=trial
+            model, train_loader, val_loader, hp["lr"], hp["weight_decay"], max_epochs_per_trial, patience, device, pos_weight=pos_weight, trial=trial
         )
 
     # Create an Optuna study for hyperparameter optimization, specifying that we want to maximize the validation ROC-AUC.
@@ -256,7 +262,7 @@ def train_lstm(
     final_model = LSTMClassifier(input_dim, best["hidden_dim"], best["num_layers"], best["dropout"], best["activation"]).to(device)
     train_loader = make_loader(X_train, y_train, best["batch_size"], shuffle=True)
     val_loader = make_loader(X_val, y_val, best["batch_size"], shuffle=False)
-    train_full(final_model, train_loader, val_loader, best["lr"], best["weight_decay"], max_epochs_final, patience, device, verbose=True)
+    train_full(final_model, train_loader, val_loader, best["lr"], best["weight_decay"], max_epochs_final, patience, device, pos_weight=pos_weight, verbose=True)
 
     # save checkpoint
     model_path = model_dir / "lstm_best.pt"
