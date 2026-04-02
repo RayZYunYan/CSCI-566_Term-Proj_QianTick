@@ -147,7 +147,7 @@ def predict_gru(model_path: str | Path, data_dir: str | Path | None = None, spli
         data_dir = PROJECT_ROOT / "data" / "processed" / "stock" / "dataset"
     model = load_gru_model(model_path, device)
     splits, _ = load_dataset(data_dir)
-    loader = make_loader(splits[split]["X_seq"], splits[split]["y"], batch_size, shuffle=False)
+    loader = make_loader(splits[split]["X"], splits[split]["y"], batch_size, shuffle=False)
     y_prob, y_true = get_predictions(model, loader, device)
     y_pred = (y_prob >= 0.5).astype(int)
     return y_prob, y_pred, y_true
@@ -158,7 +158,7 @@ def extract_gru_features(model_path: str | Path, data_dir: str | Path | None = N
         data_dir = PROJECT_ROOT / "data" / "processed" / "stock" / "dataset"
     model = load_gru_model(model_path, device)
     splits, _ = load_dataset(data_dir)
-    X = splits[split]["X_seq"]
+    X = splits[split]["X"]
     ds = TensorDataset(torch.from_numpy(X))
     loader = DataLoader(ds, batch_size=batch_size, shuffle=False)
     chunks = []
@@ -190,9 +190,9 @@ def train_gru(
     np.random.seed(seed)
 
     splits, _ = load_dataset(data_dir)
-    X_train, y_train = splits["train"]["X_seq"], splits["train"]["y"]
-    X_val, y_val = splits["val"]["X_seq"], splits["val"]["y"]
-    X_test, y_test = splits["test"]["X_seq"], splits["test"]["y"]
+    X_train, y_train = splits["train"]["X"], splits["train"]["y"]
+    X_val, y_val = splits["val"]["X"], splits["val"]["y"]
+    X_test, y_test = splits["test"]["X"], splits["test"]["y"]
     input_dim = X_train.shape[2]
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)

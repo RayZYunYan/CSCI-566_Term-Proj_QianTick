@@ -21,21 +21,20 @@
         ▼                                         feat_news (FinBERT 特征向量)
   ③ dataset_builder.py                                 │
      构建滑动窗口 + 标签                                │
+     所有特征合并为统一输入                              │
      按时间切分 train/val/test                          │
      仅用 train set 做归一化                            │
         │                                              │
-        ├── X_seq  (30天窗口) ─→ ④ lstm_model.py       │
-        │                    ─→ ④ gru_model.py         │
-        │                    ─→ ④ tcn_model.py         │
+        ├── X (30天窗口, 全部特征)                      │
+        │      ─→ ④ lstm_model.py                      │
+        │      ─→ ④ gru_model.py                       │
+        │      ─→ ④ tcn_model.py                       │
         │                                              │
-        └── X_tech (当日快照) ─→ ④ tech_indicator_mlp.py
-                                      │                │
-                 ┌────────────────────┘                │
-                 │  4个模型各自输出:                      │
-                 │   · P(up) 分类概率                    │
-                 │   · feature vector 特征向量           │
-                 │                                      │
-                 ▼                                      │
+        │   3个模型各自输出:                              │
+        │    · P(up) 分类概率                            │
+        │    · feature vector 特征向量                   │
+        │                                              │
+        ▼                                              │
   ⑤ fusion_interface.py                                │
      导出所有特征向量 + metadata                         │
      打包成 fusion 层要求的格式                          │
@@ -50,7 +49,6 @@
                         ├── P(up)   分类（涨/跌）
                         └── r̂       回归（预测收益率）
 
-
 二、执行顺序与阶段依赖
 ================================================================================
 
@@ -59,21 +57,20 @@
   ① fetch_data.py  →  ② feature_engineering.py  →  ③ dataset_builder.py
   完成后产出: train.npz / val.npz / test.npz（归一化后的监督学习样本）
 
-  阶段 B：模型训练与评估（4个模型独立且可并行）
+  阶段 B：模型训练与评估（3个模型独立且可并行）
   ──────────────────────────────────────────
   ④ lstm_model.py      读取 train.npz → Bayesian超参搜索 → 训练 → 评估 → 保存
   ④ gru_model.py       同上
   ④ tcn_model.py       同上
-  ④ tech_indicator_mlp.py   同上（但输入是 X_tech 而非 X_seq）
 
   ⑤ metrics.py 被每个模型文件内部调用，计算 ROC-AUC / Accuracy / F1 等指标
 
   阶段 C：特征向量导出（为 Fusion 做准备）
   ──────────────────────────────────────
   ⑤ fusion_interface.py
-     · 加载 4 个训练好的模型
+     · 加载 3 个训练好的模型
      · 调用每个模型的 extract_features()
-     · 把 4 组特征向量 + metadata 打包导出
+     · 把 3 组特征向量 + metadata 打包导出
      · 这一步的输出就是交给 News 组做 Fusion 的"接口文件"
 
   阶段 D：Fusion（与 News 组联合完成，不在我们 pipeline 内）
@@ -95,20 +92,21 @@
   读取 all_stocks.csv，对每个 ticker 独立计算两组特征：
     · 序列特征（12个）: 每日价格变化率、对数收益率、波动率等
     · 技术指标（27个）: SMA/EMA、RSI、MACD、布林带、ATR、动量等
+  这两组特征在 dataset_builder 阶段会被合并为统一的输入。
   重要：这一步绝不做归一化，只输出原始特征值。
   输出 data/processed/stock/features/all_features.csv。
 
   dataset_builder.py
   ──────────────────
   读取 all_features.csv，完成以下工作：
-    · 对每个 ticker 构建 30 天的滑动窗口 → X_seq (N, 30, 12)
-    · 提取每个样本 day t 当天的技术指标快照 → X_tech (N, 27)
+    · 将序列特征和技术指标合并为统一的特征集（去重后约39个特征）
+    · 对每个 ticker 构建 30 天的滑动窗口 → X (N, 30, num_features)
     · 生成二分类标签：明天收盘价 > 今天收盘价 = 1，否则 = 0
     · 全部样本按日期排序后，按 70%/15%/15% 做时间切分
     · 仅用 train set 计算 mean/std，再统一 apply 到 val 和 test
     · 保存 metadata（ticker, as_of_date, target_date）方便后续回溯
   输出到 data/processed/stock/dataset/：
-    train.npz, val.npz, test.npz    → 包含 X_seq, X_tech, y
+    train.npz, val.npz, test.npz    → 包含 X, y
     train_meta.csv, val_meta.csv, test_meta.csv
     norm_stats.npz                   → 归一化参数（推理时复用）
 
@@ -139,29 +137,6 @@
   使用因果卷积 + 膨胀卷积来捕获长距离时间依赖，不依赖循环结构。
   同样提供 forward() + extract_features() 双模式。
 
-  tech_indicator_mlp.py
-  ─────────────────────
-  一个前馈全连接网络，输入是 X_tech (27个技术指标的当日快照)。
-  与序列模型不同，它不处理时间窗口，只看 day t 这一天的技术指标。
-  同样提供 forward() + extract_features() 双模式。
-  它的 feature vector 会和三个序列模型的 feature vector 一起送入 Fusion。
-
-  为什么需要单独的 Tech MLP（设计决策说明）:
-  X_tech 是 shape (N, 27) 的二维向量，而 LSTM/GRU/TCN 要求的输入是 shape
-  (N, 30, 12) 的三维时间窗口，维度和语义都对不上，因此 X_tech 无法直接喂给
-  序列模型。虽然理论上可以把 X_tech 复制 30 份拼到 X_seq 后面绕过这个限制，
-  但这样做会模糊两组特征的语义边界。更重要的是，X_seq 捕获的是价格在 30 天
-  内的"动态变化模式"（趋势、动量反转、波动率聚集），而 X_tech 捕获的是 day t
-  当天的"市场状态"（RSI 是否超买、价格在布林带的位置、MACD 是否金叉）——
-  这些技术指标内部已经包含了历史回看（如 RSI-14 看过去 14 天），不需要再通过
-  时间窗口建模。从纯预测能力看，一个浅层 MLP 对 27 个技术指标做二分类本质上
-  接近一个高级逻辑回归，它单独的预测力不会比序列模型更强。Tech MLP 真正的
-  价值在于架构层面：cross-attention fusion 层要求所有输入都是经过学习的 feature
-  vector（而非原始数值），Tech MLP 负责把 27 个原始指标值投射到一个与序列模型
-  输出维度对齐的、经过非线性变换的特征空间里，让 fusion 层的 attention 机制能
-  统一处理。如果没有这一步，fusion 层收到的将是一半 learned embedding 一半
-  raw features，表示空间不一致会影响 attention 的效果。
-
   metrics.py
   ──────────
   所有模型共用的评估工具。不负责训练，只负责算分数。
@@ -172,9 +147,9 @@
   fusion_interface.py
   ───────────────────
   这个文件不训练任何模型，它的职责是：
-    · 加载已训练好的 4 个模型（LSTM, GRU, TCN, Tech MLP）
+    · 加载已训练好的 3 个模型（LSTM, GRU, TCN）
     · 对 test set（或指定 split）的每个样本调用 extract_features()
-    · 把 4 组特征向量导出为 .pt 或 .npy 文件
+    · 把 3 组特征向量导出为 .pt 或 .npy 文件
     · 同时导出一份 metadata CSV（ticker, as_of_date, target_date, 各模型的 P(up)）
   这份导出文件就是我们交给 Fusion 层 / News 组的"合同"。
 
@@ -185,24 +160,32 @@
   所有其他文件都不能独立运行，必须由 main_pipeline.py 统一调度。
 
 
-四、X_seq 和 X_tech 分别是什么
+四、统一特征输入设计
 ================================================================================
 
-  X_seq — shape: (N, 30, 12)
+  X — shape: (N, 30, ~39)
   ──────
-  过去 30 个交易日的 12 个序列特征组成的时间窗口。
+  过去 30 个交易日的所有特征组成的时间窗口，是一个三维张量。
   喂给 LSTM / GRU / TCN 这三个序列模型。
-  包含: 对前日收盘的价格变化率（open/high/low/close）、对数成交量、
-       日收益率、对数收益率、日内波幅、开收差、成交量变化率、
-       20日均线偏离度、20日波动率比。
 
-  X_tech — shape: (N, 27)
-  ──────
-  day t 当天的 27 个技术指标快照，是一个一维向量而非时间序列。
-  喂给 Tech Indicator MLP 这个前馈模型。
-  包含: SMA/EMA (5,10,20天)、价格相对均线偏离度、RSI-14、
-       MACD 三件套、布林带 (宽度/%B)、ATR/ATR比率、
-       10日动量、成交量比率。
+  这个统一输入合并了两组特征（去重后）：
+
+  序列特征（来自 SEQUENCE_FEATURE_COLS）:
+    对前日收盘的价格变化率（open/high/low/close）、对数成交量、
+    日收益率、对数收益率、日内波幅、开收差、成交量变化率、
+    20日均线偏离度、20日波动率比。
+
+  技术指标（来自 TECH_INDICATOR_COLS）:
+    SMA/EMA (5,10,20天)、价格相对均线偏离度、RSI-14、
+    MACD 三件套、布林带 (宽度/%B)、ATR/ATR比率、
+    10日动量、成交量比率。
+
+  这两组特征被合并成统一的特征向量后，以 30 天窗口的形式输入模型。
+  每个模型同时看到价格动态和技术指标在时间维度上的变化模式，
+  能够学习到更丰富的时序表示。技术指标本身虽然已包含历史回看
+  （如 RSI-14 回看 14 天），但将它们纳入时间窗口后，模型可以
+  捕获"RSI 从超买区域回落"这类跨天的状态转换模式，这是单日快照
+  无法提供的信息。
 
 
 五、与 News 组的 Fusion 对接——我们需要准备什么
@@ -211,11 +194,10 @@
   Fusion 层（cross-attention + dual-task）不是我们写的，它在 src/fusion/ 里。
   但我们必须把"接口"准备好。具体来说，我们需要导出以下内容：
 
-  1. 四组特征向量文件（对齐到同一批样本）
+  1. 三组特征向量文件（对齐到同一批样本）
      · outputs/features/lstm_features.pt     shape (N, hidden_dim)
      · outputs/features/gru_features.pt      shape (N, hidden_dim)
      · outputs/features/tcn_features.pt      shape (N, hidden_dim)
-     · outputs/features/tech_mlp_features.pt shape (N, tech_hidden_dim)
 
   2. 一份 metadata CSV
      · outputs/predictions/price_model_outputs.csv
@@ -230,7 +212,7 @@
 
   News 组需要按同样的 (ticker, as_of_date, target_date) 对齐规则，
   输出一个 feat_news 特征向量。然后 Fusion 层会：
-     · 把 [feat_lstm, feat_gru, feat_tcn] 拼接 → 线性投射 → 加上 feat_tech_mlp
+     · 把 [feat_lstm, feat_gru, feat_tcn] 拼接 → 线性投射
        → 完整的 price-side embedding → 作为 Query
      · feat_news → 作为 Key 和 Value
      · Cross-Attention → 残差连接 → LayerNorm → 融合表示
@@ -238,7 +220,7 @@
      · 联合损失: L = 0.7 × L_cls + 0.3 × L_reg
 
 
-六、单个模型的训练流程（以 LSTM 为例，GRU / TCN / Tech MLP 完全相同）
+六、单个模型的训练流程（以 LSTM 为例，GRU / TCN 完全相同）
 ================================================================================
 
   每个模型文件（如 lstm_model.py）的 train_lstm() 函数包含完整的三阶段流程：

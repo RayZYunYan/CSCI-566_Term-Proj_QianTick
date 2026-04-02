@@ -30,36 +30,30 @@ pipeline. To prevent data leakage, all input features must be constructed exclus
 at or before the prediction time. No future information may be used at any stage of preprocessing, feature engineering, 
 model training, or final fusion.
 
-During the feature engineering stage, we will transform the raw OHLCV records into two distinct groups of structured 
-inputs. The first group is sequence features, including daily returns, log returns, price change ratios relative to 
-the previous close, log-transformed volume, and rolling statistics. These features form a multivariate time-series 
-tensor organized over a fixed-length lookback window of 30 trading days, referred to as X_seq with shape 
-(N, 30, num_seq_features). The second group is technical indicator features, including moving averages, exponential 
-moving averages, RSI, MACD, Bollinger Bands, ATR, momentum, and volume ratios. These indicators represent a snapshot 
-of the market's technical state at the prediction day t and are organized as a flat vector per sample, referred to as 
-X_tech with shape (N, num_tech_features). This separation is deliberate: sequence features capture how prices evolve 
-over time and are consumed by recurrent or convolutional sequence models, while technical indicators summarize the 
-current market state and are consumed by a dedicated feedforward model. Feature engineering strictly avoids any 
-normalization; normalization is deferred to the dataset building stage where it is performed only after time-based 
-splitting, using exclusively training set statistics, to prevent data leakage. The auxiliary market series, such as 
-SPY, QQQ, ^VIX, and XLK, are aligned over the same time window and incorporated as additional feature dimensions.
+During the feature engineering stage, we will transform the raw OHLCV records into two groups of structured features. 
+The first group is sequence features, including daily returns, log returns, price change ratios relative to the 
+previous close, log-transformed volume, and rolling statistics. The second group is technical indicator features, 
+including moving averages, exponential moving averages, RSI, MACD, Bollinger Bands, ATR, momentum, and volume ratios. 
+In the dataset building stage, these two groups of features are merged into a single unified feature set (with 
+deduplication), and a 30-day rolling window is applied to construct the model input X with shape 
+(N, 30, num_features). All three sequence models consume this same unified input, allowing them to simultaneously 
+observe both price dynamics and technical indicator state transitions over the lookback window. Feature engineering 
+strictly avoids any normalization; normalization is deferred to the dataset building stage where it is performed only 
+after time-based splitting, using exclusively training set statistics, to prevent data leakage. The auxiliary market 
+series, such as SPY, QQQ, ^VIX, and XLK, are aligned over the same time window and incorporated as additional 
+feature dimensions.
 
-For model selection, we adopt four model architectures: LSTM, GRU, TCN, and a Technical Indicator MLP. LSTM is one 
-of the most established deep learning models for sequential data and serves as the primary benchmark for financial 
-time-series prediction due to its ability to capture temporal dependency structures. GRU is a lighter and more 
-computationally efficient recurrent architecture that often achieves comparable or more stable performance than LSTM 
-with fewer parameters. TCN represents a different modeling paradigm from recurrent networks; through causal 
-convolutions and dilated convolutions, it models temporal dependencies efficiently while benefiting from faster 
-training and more stable gradient propagation. These three sequence models all consume X_seq and each provides two 
-output modes: a classification forward pass producing P(up) for standalone evaluation, and a feature extraction mode 
-producing a learned hidden representation before the classifier head for downstream fusion. The fourth model, 
-Technical Indicator MLP, is a feedforward network that processes the flat X_tech vector rather than a time-series 
-window. Its primary role is not to serve as a standalone predictor but to encode the 27 raw technical indicator 
-values into a learned feature vector that is dimensionally and semantically compatible with the sequence models' 
-outputs. This is necessary because the cross-attention fusion layer expects all price-side inputs to be learned 
-embeddings in a shared representation space rather than a mix of learned vectors and raw numerical features.
+For model selection, we adopt three model architectures: LSTM, GRU, and TCN. LSTM is one of the most established deep 
+learning models for sequential data and serves as the primary benchmark for financial time-series prediction due to its 
+ability to capture temporal dependency structures. GRU is a lighter and more computationally efficient recurrent 
+architecture that often achieves comparable or more stable performance than LSTM with fewer parameters. TCN represents 
+a different modeling paradigm from recurrent networks; through causal convolutions and dilated convolutions, it models 
+temporal dependencies efficiently while benefiting from faster training and more stable gradient propagation. All three 
+models consume the same unified feature input X and each provides two output modes: a classification forward pass 
+producing P(up) for standalone evaluation, and a feature extraction mode producing a learned hidden representation 
+before the classifier head for downstream fusion.
 
-In the training and evaluation stage, all four models follow the same rigorous training protocol. The dataset is 
+In the training and evaluation stage, all three models follow the same rigorous training protocol. The dataset is 
 split strictly by time into train (70%), validation (15%), and test (15%) sets, ensuring models are always trained 
 on earlier data and evaluated on later data. Normalization statistics (mean and standard deviation) are computed 
 exclusively from the training set and then applied uniformly to validation and test sets, preventing any future 
@@ -70,28 +64,28 @@ trains with early stopping that monitors validation ROC-AUC, and an Optuna Media
 trials early to save computation. After the search, the best hyperparameter combination is used to retrain a final 
 model with a longer epoch budget, and the model checkpoint with the best validation performance is saved. The final 
 model is then evaluated on the held-out test set using Accuracy, Precision, Recall, F1-score, and ROC-AUC. All 
-four models are compared on the same test set under these unified metrics.
+three models are compared on the same test set under these unified metrics.
 
 At the engineering level, the system is organized as a modular pipeline controlled by main_pipeline.py through 
 boolean flags. The pipeline stages are: (1) fetch_data.py downloads raw OHLCV data via yfinance; (2) 
 feature_engineering.py computes sequence features and technical indicators without any normalization; (3) 
-dataset_builder.py constructs rolling-window supervised samples, performs time-based splitting, and applies 
-normalization using only training set statistics; (4) each model file (lstm_model.py, gru_model.py, tcn_model.py, 
-tech_indicator_mlp.py) contains its own complete training pipeline including Bayesian search, final retraining, 
-test evaluation, and artifact saving; (5) metrics.py provides shared evaluation functions called internally by 
-each model; (6) fusion_interface.py loads all four trained models, extracts feature vectors via each model's 
-extract_features() method, and exports them alongside metadata for the downstream cross-attention fusion layer. 
-Each stage saves its outputs to disk and subsequent stages read from disk, ensuring a clean separation of concerns 
-and full reproducibility.
+dataset_builder.py merges all features into a unified input, constructs rolling-window supervised samples, performs 
+time-based splitting, and applies normalization using only training set statistics; (4) each model file 
+(lstm_model.py, gru_model.py, tcn_model.py) contains its own complete training pipeline including Bayesian search, 
+final retraining, test evaluation, and artifact saving; (5) metrics.py provides shared evaluation functions called 
+internally by each model; (6) fusion_interface.py loads all three trained models, extracts feature vectors via each 
+model's extract_features() method, and exports them alongside metadata for the downstream cross-attention fusion 
+layer. Each stage saves its outputs to disk and subsequent stages read from disk, ensuring a clean separation of 
+concerns and full reproducibility.
 
 In summary, the workflow of the price prediction module forms a complete pipeline. We begin by collecting 
 multi-stock historical price data and relevant market series through yfinance, constructing the raw price database. 
-We then compute two groups of features—sequence features and technical indicators—without normalization, and build 
-rolling-window supervised samples with time-based splitting and train-only normalization. Next, we train four models 
-(LSTM, GRU, TCN, and Technical Indicator MLP) using Bayesian hyperparameter search with early stopping, evaluate 
-them under unified metrics, and save the best checkpoint for each. Finally, fusion_interface.py collects feature 
-vectors from all four trained models and exports them alongside prediction metadata, producing the complete 
-price-side output that the downstream cross-attention fusion layer requires.
+We then compute two groups of features—sequence features and technical indicators—without normalization, merge them 
+into a unified input, and build rolling-window supervised samples with time-based splitting and train-only 
+normalization. Next, we train three models (LSTM, GRU, and TCN) using Bayesian hyperparameter search with early 
+stopping, evaluate them under unified metrics, and save the best checkpoint for each. Finally, fusion_interface.py 
+collects feature vectors from all three trained models and exports them alongside prediction metadata, producing 
+the complete price-side output that the downstream cross-attention fusion layer requires.
 
 ---
 
@@ -111,35 +105,34 @@ price-side output that the downstream cross-attention fusion layer requires.
 清晰、易于解释，也最适合作为整个 pipeline 的统一训练目标。为了避免数据泄漏，我们所有输入特征都只能使用预测时刻之前已经可观测到的信息，不能使用
 任何未来信息，这一原则会贯穿数据处理、特征工程、模型训练和最终融合的所有阶段。
 
-在 feature engineering 阶段，我们会从原始 OHLCV 数据中构造两组不同性质的特征。第一组是序列特征（X_seq），包括对前日收盘的价格变化率、
-对数成交量、日收益率、对数收益率、日内波幅、开收差、成交量变化率、20日均线偏离度和波动率比等，以 30 天的滑动窗口组织成 shape 为 (N, 30, 
-num_seq_features) 的三维时间序列张量，供 LSTM/GRU/TCN 等序列模型使用。第二组是技术指标特征（X_tech），包括 SMA/EMA、RSI、MACD、布林带、
-ATR、动量和成交量比率等共 27 个指标，以 day t 当天的快照形式组织为 shape (N, 27) 的一维向量，供 Technical Indicator MLP 使用。这两组
-特征的分离是有意设计的：序列特征捕获价格在时间维度上的动态变化模式，技术指标则总结了当天市场的技术分析状态。重要的是，feature engineering 阶段
-绝不做任何归一化操作；归一化被推迟到 dataset_builder 阶段，在按时间切分完 train/val/test 之后，仅用 train set 的统计量来完成，从而
-彻底杜绝数据泄漏。市场辅助序列如 SPY、QQQ、^VIX、XLK 也会在同样的时间窗口下对齐并以额外特征维度的形式并入输入。
-在模型选择上，我们采用四个模型架构：LSTM、GRU、TCN 和 Technical Indicator MLP。LSTM 是最经典的深度学习时序模型之一，作为金融时序
-预测的主基线；GRU 更轻量高效，在许多中等规模时序任务中能以更少参数获得与 LSTM 相近甚至更稳定的表现；TCN 通过因果卷积和膨胀卷积来建模时间依赖，
-训练更快、梯度传播更稳定。这三个序列模型都消费 X_seq，并且每个模型都具备双模式输出：forward() 产生分类概率 P(up) 用于独立评估，extract_features() 
-产生分类头之前的隐藏层特征向量用于下游 fusion。第四个模型 Technical Indicator MLP 是一个前馈全连接网络，处理的是一维的 X_tech 向量而非时间
-序列窗口。它的核心价值不在于自身的预测能力，而在于把 27 个原始技术指标值编码成一个与序列模型输出维度对齐的、经过非线性变换的 learned embedding，
-使得 cross-attention fusion 层能够在统一的表示空间中处理所有 price-side 输入。
+在 feature engineering 阶段，我们会从原始 OHLCV 数据中构造两组不同性质的特征。第一组是序列特征，包括对前日收盘的价格变化率、对数成交量、
+日收益率、对数收益率、日内波幅、开收差、成交量变化率、20日均线偏离度和波动率比等。第二组是技术指标特征，包括 SMA/EMA、RSI、MACD、布林带、
+ATR、动量和成交量比率等。在 dataset_builder 阶段，这两组特征会被合并为统一的特征集（去重后约 39 个特征），然后以 30 天滑动窗口的形式
+组织成 shape 为 (N, 30, num_features) 的三维张量，供所有序列模型使用。这样做的好处是让模型同时看到价格动态和技术指标在时间维度上的变化
+模式，例如"RSI 从超买区域回落"这类跨天状态转换，是单日快照无法捕获的。重要的是，feature engineering 阶段绝不做任何归一化操作；归一化被
+推迟到 dataset_builder 阶段，在按时间切分完 train/val/test 之后，仅用 train set 的统计量来完成，从而彻底杜绝数据泄漏。市场辅助序列如 
+SPY、QQQ、^VIX、XLK 也会在同样的时间窗口下对齐并以额外特征维度的形式并入输入。
 
-在训练与评估阶段，四个模型遵循完全一致的严格训练协议。数据按时间顺序切分为 train (70%)、val (15%)、test (15%)，确保模型始终是用过去
+在模型选择上，我们采用三个模型架构：LSTM、GRU 和 TCN。LSTM 是最经典的深度学习时序模型之一，作为金融时序预测的主基线；GRU 更轻量高效，
+在许多中等规模时序任务中能以更少参数获得与 LSTM 相近甚至更稳定的表现；TCN 通过因果卷积和膨胀卷积来建模时间依赖，训练更快、梯度传播更稳定。
+三个模型都消费同一个统一的特征输入 X，并且每个模型都具备双模式输出：forward() 产生分类概率 P(up) 用于独立评估，extract_features() 
+产生分类头之前的隐藏层特征向量用于下游 fusion。
+
+在训练与评估阶段，三个模型遵循完全一致的严格训练协议。数据按时间顺序切分为 train (70%)、val (15%)、test (15%)，确保模型始终是用过去
 预测未来。归一化统计量（均值和标准差）仅从 train set 计算，然后统一应用到 val 和 test，杜绝任何未来信息泄漏。每个模型的训练由 Optuna 
 Bayesian 超参搜索驱动（TPE 采样器，约 50 个 trial），搜索范围覆盖 hidden_dim、num_layers、dropout、learning_rate、batch_size、
 weight_decay 和激活函数。每个 trial 内部配备 early stopping 监控 val ROC-AUC，Optuna 的 MedianPruner 会提前终止表现不佳的 trial 
 以节省算力。搜索完成后，用最佳超参组合重新训练 final model（更长的 epoch 上限），保存验证表现最好的 checkpoint。最终在 held-out test set 上
-使用 Accuracy、Precision、Recall、F1-score 和 ROC-AUC 进行评估。四个模型在同一测试集上用统一指标进行公平比较。
+使用 Accuracy、Precision、Recall、F1-score 和 ROC-AUC 进行评估。三个模型在同一测试集上用统一指标进行公平比较。
 
 在工程实现层面，系统以 main_pipeline.py 为唯一入口，通过 bool 开关控制各阶段的执行。流程为：(1) fetch_data.py 通过 yfinance 下载原始 
-OHLCV 数据；(2) feature_engineering.py 计算序列特征和技术指标，不做任何归一化；(3) dataset_builder.py 构建滑动窗口监督学习样本，按时间
-切分，并仅用 train set 统计量做归一化；(4) 每个模型文件（lstm_model.py, gru_model.py, tcn_model.py, tech_indicator_mlp.py）内部封装
-了完整的训练流程，包括 Bayesian 搜索、final 重训练、test 评估和 artifact 保存；(5) metrics.py 提供共享的评估函数，由各模型内部调用；(6) 
-fusion_interface.py 加载四个训练好的模型，通过各自的 extract_features() 方法提取特征向量，连同 metadata 一起导出给下游 cross-attention 
-fusion 层。每个阶段的输出全部持久化到磁盘，后续阶段从磁盘重新读取，确保各模块解耦和实验可复现。
+OHLCV 数据；(2) feature_engineering.py 计算序列特征和技术指标，不做任何归一化；(3) dataset_builder.py 将所有特征合并为统一输入，构建
+滑动窗口监督学习样本，按时间切分，并仅用 train set 统计量做归一化；(4) 每个模型文件（lstm_model.py, gru_model.py, tcn_model.py）内部
+封装了完整的训练流程，包括 Bayesian 搜索、final 重训练、test 评估和 artifact 保存；(5) metrics.py 提供共享的评估函数，由各模型内部调用；
+(6) fusion_interface.py 加载三个训练好的模型，通过各自的 extract_features() 方法提取特征向量，连同 metadata 一起导出给下游 
+cross-attention fusion 层。每个阶段的输出全部持久化到磁盘，后续阶段从磁盘重新读取，确保各模块解耦和实验可复现。
 
 因此，price prediction 模块的工作流程可以概括为：首先从 yfinance 抓取多只股票及相关市场价格数据，构建原始价格数据库；然后计算序列特征和技术
-指标两组特征（不做归一化），构建滑动窗口监督学习样本并按时间切分和 train-only 归一化；接着训练 LSTM、GRU、TCN 和 Technical Indicator MLP 
-四个模型，每个模型都使用 Bayesian 超参搜索 + early stopping 找到最优配置，保存最佳 checkpoint 和评估报告；最后由 fusion_interface.py 
-收集四个模型的特征向量并导出，连同预测 metadata 一起，作为完整的 price-side 输出交给下游 cross-attention fusion 层。
+指标两组特征（不做归一化），在 dataset_builder 阶段合并为统一输入，构建滑动窗口监督学习样本并按时间切分和 train-only 归一化；接着训练 LSTM、
+GRU 和 TCN 三个模型，每个模型都使用 Bayesian 超参搜索 + early stopping 找到最优配置，保存最佳 checkpoint 和评估报告；最后由 
+fusion_interface.py 收集三个模型的特征向量并导出，连同预测 metadata 一起，作为完整的 price-side 输出交给下游 cross-attention fusion 层。

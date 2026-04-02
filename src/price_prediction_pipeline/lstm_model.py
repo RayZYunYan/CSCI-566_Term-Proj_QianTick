@@ -159,7 +159,7 @@ def predict_lstm(model_path: str | Path, data_dir: str | Path | None = None, spl
         data_dir = PROJECT_ROOT / "data" / "processed" / "stock" / "dataset"
     model = load_lstm_model(model_path, device)
     splits, _ = load_dataset(data_dir)
-    loader = make_loader(splits[split]["X_seq"], splits[split]["y"], batch_size, shuffle=False)
+    loader = make_loader(splits[split]["X"], splits[split]["y"], batch_size, shuffle=False)
     y_prob, y_true = get_predictions(model, loader, device)
     y_pred = (y_prob >= 0.5).astype(int)
     # Return predicted probabilities, predicted labels, and true labels as numpy arrays.
@@ -172,7 +172,7 @@ def extract_lstm_features(model_path: str | Path, data_dir: str | Path | None = 
         data_dir = PROJECT_ROOT / "data" / "processed" / "stock" / "dataset"
     model = load_lstm_model(model_path, device)
     splits, _ = load_dataset(data_dir)
-    X = splits[split]["X_seq"]
+    X = splits[split]["X"]
     ds = TensorDataset(torch.from_numpy(X))
     loader = DataLoader(ds, batch_size=batch_size, shuffle=False)
     chunks = []
@@ -208,9 +208,9 @@ def train_lstm(
 
     # Load data
     splits, _ = load_dataset(data_dir)
-    X_train, y_train = splits["train"]["X_seq"], splits["train"]["y"]
-    X_val, y_val = splits["val"]["X_seq"], splits["val"]["y"]
-    X_test, y_test = splits["test"]["X_seq"], splits["test"]["y"]
+    X_train, y_train = splits["train"]["X"], splits["train"]["y"]
+    X_val, y_val = splits["val"]["X"], splits["val"]["y"]
+    X_test, y_test = splits["test"]["X"], splits["test"]["y"]
     input_dim = X_train.shape[2]
     
     # Optuna search
