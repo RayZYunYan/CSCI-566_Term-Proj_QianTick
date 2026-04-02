@@ -44,5 +44,5 @@ def price_prediction_task(
     print("[PRICE PREDICTION TASK COMPLETE]\n")
 
 if __name__ == "__main__":
-    data_preprocessing(if_fetch_data=False, if_feature_engineering=True, if_build_dataset=True)
+    data_preprocessing(if_fetch_data=False, if_feature_engineering=False, if_build_dataset=False)
     price_prediction_task(if_train_lstm=False, if_train_gru=False, if_train_tcn=False)
