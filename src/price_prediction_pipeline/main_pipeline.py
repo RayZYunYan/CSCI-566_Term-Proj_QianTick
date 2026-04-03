@@ -28,10 +28,10 @@ def price_prediction_task(
     if_train_lstm: bool = False, 
     if_train_gru: bool = False, 
     if_train_tcn: bool = False, 
-    n_trials: int = 35, 
-    max_epochs_per_trial: int = 40, 
-    max_epochs_final: int = 150, 
-    patience: int = 12
+    n_trials: int = 50, 
+    max_epochs_per_trial: int = 60, 
+    max_epochs_final: int = 300, 
+    patience: int = 200
 ):
     if (if_train_lstm):
         print("[TRAIN LSTM]\n")
