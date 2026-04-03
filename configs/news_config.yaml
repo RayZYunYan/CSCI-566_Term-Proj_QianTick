@@ -1,5 +1,6 @@
 # News Module Config
-# 所有超参数集中在此，其他三人从此读取，不要在代码里硬编码数字
+# All hyperparameters live here. Other subtasks must read from this file —
+# do NOT hardcode numbers in Python files.
 
 data:
   raw_finnhub: data/processed/news/finnhub_merged.csv
@@ -9,24 +10,48 @@ data:
   news_features: data/features/news_features.parquet
   labels: data/features/labels.parquet
 
+preprocess:
+  market_timezone: America/New_York
+  cutoff_hour_et: 16
+  min_headline_len: 10
+  garbled_non_ascii_ratio: 0.30
+
+# Tickers covered by this pipeline (must match finnhub_merged.csv symbols)
+tickers:
+  - AAPL
+  - ADBE
+  - AMD
+  - AMZN
+  - CRM
+  - GOOGL
+  - INTC
+  - META
+  - MSFT
+  - NFLX
+  - NVDA
+  - ORCL
+  - QCOM
+  - SHOP
+  - TSLA
+
 model:
   finbert_model: ProsusAI/finbert
   freeze_bert: true
   embedding_dim: 768
   sentiment_dim: 3
-  feature_dim: 771        # embedding_dim + sentiment_dim
+  feature_dim: 771        # embedding_dim + sentiment_dim = feat_0 ~ feat_770
   hidden_dim: 256
   aggregation: mean       # mean | attention
 
 training:
-  news_window: 7          # 过去 N 天新闻聚合窗口
+  news_window: 7          # articles on day T feed predictions T ~ T+6
   batch_size: 64
   lr: 1.0e-4
   weight_decay: 1.0e-5
   epochs: 30
   early_stopping_patience: 5
   seed: 42
-  encoder_checkpoint_every: 10000   # 断点续跑：每编码 N 篇保存一次
+  encoder_checkpoint_every: 10000   # save encoder checkpoint every N articles
 
 split:
   train_end: "2024-06-30"
