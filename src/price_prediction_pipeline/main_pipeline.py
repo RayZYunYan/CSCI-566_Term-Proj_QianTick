@@ -9,6 +9,7 @@ def data_preprocessing(
     if_fetch_data: bool = False, 
     if_feature_engineering: bool = False, 
     if_build_dataset: bool = False, 
+    feature_preset: str = "full", 
     lookback: int = 30
 ):
     if (if_fetch_data):
@@ -21,7 +22,7 @@ def data_preprocessing(
 
     if (if_build_dataset):
         print("[BUILD DATASET]\n")
-        build_dataset(lookback=lookback)
+        build_dataset(feature_preset=feature_preset, lookback=lookback)
     
     print("[DATA PREPROCESSING COMPLETE]\n")
 
@@ -29,6 +30,8 @@ def price_prediction_task(
     if_train_lstm: bool = False, 
     if_train_gru: bool = False, 
     if_train_tcn: bool = False, 
+    data_dir: str | None = None, 
+    output_dir: str | None = None, 
     n_trials: int = 50, 
     max_epochs_per_trial: int = 60, 
     max_epochs_final: int = 300, 
@@ -37,6 +40,8 @@ def price_prediction_task(
     if (if_train_lstm):
         print("[TRAIN LSTM]\n")
         train_lstm(
+            data_dir=data_dir, 
+            output_dir=output_dir, 
             n_trials=n_trials,
             max_epochs_per_trial=max_epochs_per_trial,
             max_epochs_final=max_epochs_final,
@@ -46,6 +51,8 @@ def price_prediction_task(
     if (if_train_gru):
         print("[TRAIN GRU]\n")
         train_gru(
+            data_dir=data_dir, 
+            output_dir=output_dir, 
             n_trials=n_trials,
             max_epochs_per_trial=max_epochs_per_trial,
             max_epochs_final=max_epochs_final,
@@ -70,14 +77,21 @@ def export_features_for_fusion(if_export: bool = False, split: str = "test"):
         print("[FUSION EXPORT COMPLETE]\n")
 
 if __name__ == "__main__":
-    data_preprocessing(if_fetch_data=False, if_feature_engineering=False, if_build_dataset=False)
+    # For feature_preset, options include: "full", "relative_only".
+    data_preprocessing(
+        if_fetch_data=True, 
+        if_feature_engineering=True, 
+        if_build_dataset=True, 
+        feature_preset="relative_only", 
+        lookback=30
+    )
     price_prediction_task(
-        if_train_lstm=False, 
-        if_train_gru=False, 
-        if_train_tcn=False, 
+        if_train_lstm=True, 
+        if_train_gru=True, 
+        if_train_tcn=True, 
         n_trials=50, 
         max_epochs_per_trial=60, 
         max_epochs_final=300, 
         patience=20
     )
-    export_features_for_fusion(if_export=False)
+    export_features_for_fusion(if_export=True)
