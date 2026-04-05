@@ -49,6 +49,7 @@
                         ├── P(up)   分类（涨/跌）
                         └── r̂       回归（预测收益率）
 
+
 二、执行顺序与阶段依赖
 ================================================================================
 
@@ -83,7 +84,7 @@
 
   fetch_data.py
   ─────────────
-  通过 yfinance API 下载 20 只股票从 2018-01-01 至今的每日 OHLCV 数据。
+  通过 yfinance API 下载多只股票从 2018-01-01 至今的每日 OHLCV 数据。
   输出 data/raw/stock/all_stocks.csv，包含 Date, Ticker, Open, High, Low,
   Close, Adj Close, Volume 这些列。这是整个 pipeline 的起点。
 
@@ -118,9 +119,10 @@
   训练流程全部封装在 train_lstm() 函数中：
     · 使用 Optuna 做 Bayesian 超参搜索（hidden_dim, layers, dropout, lr,
       batch_size, weight_decay, 激活函数）
+    · 使用 BCEWithLogitsLoss 做二分类训练，并可结合类别权重缓解不平衡
     · 每个 trial 内部有 early stopping（监控 val ROC-AUC）
     · 搜索完成后用最佳参数重新训练 final model
-    · 在 test set 上评估并保存 metrics
+    · 在 validation set 上搜索最佳分类阈值，再在 test set 上评估并保存 metrics
   额外提供 load / predict / extract_features 三个独立函数，
   供 fusion_interface.py 和后续步骤调用。
   输出: outputs/models/lstm_best.pt, outputs/metrics/lstm_metrics.json
@@ -135,6 +137,7 @@
   ────────────
   与 lstm_model.py 结构一致，但编码器换成 Temporal Convolutional Network。
   使用因果卷积 + 膨胀卷积来捕获长距离时间依赖，不依赖循环结构。
+  TCN 可以看作是 price side 的第三条时序建模路线，与 LSTM / GRU 形成互补。
   同样提供 forward() + extract_features() 双模式。
 
   metrics.py
@@ -148,7 +151,7 @@
   ───────────────────
   这个文件不训练任何模型，它的职责是：
     · 加载已训练好的 3 个模型（LSTM, GRU, TCN）
-    · 对 test set（或指定 split）的每个样本调用 extract_features()
+    · 对指定 split 的每个样本调用 extract_features()
     · 把 3 组特征向量导出为 .pt 或 .npy 文件
     · 同时导出一份 metadata CSV（ticker, as_of_date, target_date, 各模型的 P(up)）
   这份导出文件就是我们交给 Fusion 层 / News 组的"合同"。
@@ -156,7 +159,8 @@
   main_pipeline.py
   ────────────────
   唯一的执行入口，通过 bool 开关按顺序调用每一步：
-    fetch → feature_engineering → dataset_builder → train_lstm → ...
+    fetch → feature_engineering → dataset_builder → train_lstm → train_gru →
+    train_tcn → export_features_for_fusion
   所有其他文件都不能独立运行，必须由 main_pipeline.py 统一调度。
 
 
@@ -187,6 +191,11 @@
   捕获"RSI 从超买区域回落"这类跨天的状态转换模式，这是单日快照
   无法提供的信息。
 
+  这里要特别强调：
+    · 当前不是"序列特征一路 + 技术指标一路"的双塔结构
+    · 而是把两类特征先合并，再由 LSTM / GRU / TCN 各自学习同一个统一输入
+    · 这样做的好处是三种模型的比较更公平，Fusion 层拿到的也是同口径 price embedding
+
 
 五、与 News 组的 Fusion 对接——我们需要准备什么
 ================================================================================
@@ -195,9 +204,12 @@
   但我们必须把"接口"准备好。具体来说，我们需要导出以下内容：
 
   1. 三组特征向量文件（对齐到同一批样本）
-     · outputs/features/lstm_features.pt     shape (N, hidden_dim)
-     · outputs/features/gru_features.pt      shape (N, hidden_dim)
-     · outputs/features/tcn_features.pt      shape (N, hidden_dim)
+     · price-side feature vector 的本质，是每个模型在分类头前学到的隐藏表示
+     · 它不是手工技术指标，而是模型读完整个 30 天窗口之后形成的时序表征
+     · 例如：
+       outputs/features/lstm_features.pt     shape (N, hidden_dim)
+       outputs/features/gru_features.pt      shape (N, hidden_dim)
+       outputs/features/tcn_features.pt      shape (N, hidden_dim)
 
   2. 一份 metadata CSV
      · outputs/predictions/price_model_outputs.csv
@@ -219,6 +231,9 @@
      · 分类头 → P(up)，回归头 → 预测收益率 r̂
      · 联合损失: L = 0.7 × L_cls + 0.3 × L_reg
 
+  也就是说，我们交给 Fusion 的不是"最后一个类别标签"，
+  而是更有信息量的中间表示 + 分类概率 + 时间对齐元数据。
+
 
 六、单个模型的训练流程（以 LSTM 为例，GRU / TCN 完全相同）
 ================================================================================
@@ -229,25 +244,26 @@
   │ 阶段 1：Bayesian 超参搜索（Optuna TPE, 默认 50 个 trial）     │
   │                                                              │
   │   搜索空间:                                                   │
-  │     · hidden_dim    : [32, 64, 128, 256]                     │
+  │     · hidden_dim    : [64, 128, 256, 512]                    │
   │     · num_layers    : [1, 2, 3]                              │
   │     · dropout       : [0.1 ~ 0.5]                            │
-  │     · learning_rate : [1e-4 ~ 1e-2]  (对数刻度)              │
+  │     · learning_rate : [5e-5 ~ 5e-3]  (对数刻度)              │
   │     · batch_size    : [64, 128, 256, 512]                    │
   │     · weight_decay  : [1e-6 ~ 1e-3]  (对数刻度)              │
   │     · activation    : [relu, gelu, silu]                     │
   │                                                              │
   │   每个 trial:                                                 │
   │     · 用采样出的超参数构建模型                                  │
-  │     · 在 train set 上训练（最多 50 epochs）                   │
+  │     · 在 train set 上训练                                      │
+  │     · 使用 BCEWithLogitsLoss 优化 logit                       │
   │     · 每个 epoch 结束后在 val set 上算 ROC-AUC                │
-  │     · early stopping: 如果 val ROC-AUC 连续 15 个 epoch       │
+  │     · early stopping: 如果 val ROC-AUC 连续若干 epoch         │
   │       不再提升，提前终止这个 trial                              │
   │     · MedianPruner: 如果表现低于其他 trial 的中位数，           │
   │       Optuna 直接砍掉这个 trial，节省时间                      │
   │     · 返回该 trial 的最佳 val ROC-AUC 给 Optuna               │
   │                                                              │
-  │   50 个 trial 结束后，Optuna 选出 val ROC-AUC 最高的超参组合   │
+  │   trial 结束后，Optuna 选出 val ROC-AUC 最高的超参组合         │
   └──────────────────────────┬────────────────────────────────────┘
                              │
                              ▼
@@ -255,8 +271,9 @@
   │ 阶段 2：用最佳超参数重新训练 Final Model                       │
   │                                                              │
   │   · 用搜索出的最佳超参数创建新模型                              │
-  │   · 在 train set 上训练（最多 200 epochs，比搜索时更长）        │
-  │   · 同样有 early stopping（patience=15, 监控 val ROC-AUC）    │
+  │   · 在 train set 上训练更长轮次                                 │
+  │   · 同样有 early stopping（监控 val ROC-AUC）                 │
+  │   · 可配合 ReduceLROnPlateau 动态降低学习率                    │
   │   · EarlyStopping 内部始终保存当前最佳 epoch 的模型权重         │
   │   · 训练结束后恢复到那个最佳 epoch 的状态                       │
   │                                                              │
@@ -270,6 +287,7 @@
   │ 阶段 3：在 test set 上做最终评估                               │
   │                                                              │
   │   · 调用 metrics.py 的 compute_classification_metrics()       │
+  │   · 使用固定 threshold = 0.5 将概率转为分类标签                 │
   │   · 计算: ROC-AUC, Accuracy, F1, Precision, Recall           │
   │   · 生成 confusion matrix                                    │
   │                                                              │
@@ -287,3 +305,69 @@
     · load_lstm_model(path)           → 加载已保存的最佳模型
     · predict_lstm(path, split)       → 用已保存模型做预测
     · extract_lstm_features(path)     → 用已保存模型提取特征向量给 Fusion
+
+
+七、P(up) 和 logit 这两个概念分别是什么
+================================================================================
+
+  1. logit
+     · 是模型 forward() 直接输出的原始分数
+     · 训练时 BCEWithLogitsLoss 直接吃这个值，因此不需要先手动做 sigmoid
+
+  2. P(up)
+     · 是把 logit 经过 sigmoid 之后得到的概率
+     · 可以理解为模型认为"下一天会上涨"的置信度
+     · 例如 0.80 表示模型比较相信会上涨，0.52 表示非常接近中性判断
+     · 使用固定 threshold = 0.5 将 P(up) 转为最终的分类标签（≥0.5 → 涨，<0.5 → 跌）
+
+  因此流程是：
+    forward() 输出 logit
+      → sigmoid 变成 P(up)
+      → P(up) ≥ 0.5 则预测为涨，否则预测为跌
+
+
+八、为什么我们需要 TCN 这条支路
+================================================================================
+
+  LSTM / GRU / TCN 都是时序模型，但它们看时间序列的方式不一样。
+
+  LSTM / GRU：
+    · 通过递归方式逐天读入序列
+    · 更容易从"前一天影响后一天"这种顺序结构里学习模式
+    · 对金融时间序列这种短中期依赖任务比较直观
+
+  TCN：
+    · 通过一维卷积在时间轴上滑动
+    · 用 causal convolution 保证不偷看未来
+    · 用 dilated convolution 扩大感受野，在不显著增加计算量的情况下看到更长历史
+    · 天然并行化更好，训练时通常比循环结构更高效
+
+  所以 TCN 的意义不是重复做一遍 LSTM，
+  而是给 price side 再增加一种不同 inductive bias 的时序编码器。
+  如果 LSTM/GRU 更擅长建模"顺序递推"模式，
+  那么 TCN 往往更擅长捕获局部形态 + 多尺度时间依赖。
+
+
+九、这个 pipeline 最终真正交付的是什么
+================================================================================
+
+  站在整个组项目的角度，我们最终交付的不是某一个单独模型文件，
+  而是一整套可复用的 price-side 子系统：
+
+  1. 一套可复现的数据处理链路
+     fetch_data → feature_engineering → dataset_builder
+
+  2. 三个可比较的价格时序模型
+     LSTM / GRU / TCN
+
+  3. 一套统一的评估口径
+     ROC-AUC / Accuracy / F1 / Precision / Recall
+
+  4. 一套统一的导出接口
+     输出 feature vector + probability + metadata
+
+  5. 一套能和 News side 对齐的 Fusion 输入合同
+     保证样本一一对应，且完全无未来信息泄漏
+
+  这也是为什么 note.txt 里最重要的，不是记录某次实验跑出了多少分，
+  而是把整个 price pipeline 的模块关系、输入输出、时间定义和接口定义讲清楚。
