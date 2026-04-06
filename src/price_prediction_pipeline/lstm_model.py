@@ -264,11 +264,11 @@ def train_lstm(
     val_loader = make_loader(X_val, y_val, best["batch_size"], shuffle=False)
     train_full(final_model, train_loader, val_loader, best["lr"], best["weight_decay"], max_epochs_final, patience, device, pos_weight=pos_weight, verbose=True)
 
-    # save checkpoint
+    # Save checkpoint
     model_path = model_dir / "lstm_best.pt"
     torch.save({"model_state_dict": final_model.state_dict(), "params": best, "input_dim": input_dim}, model_path)
 
-    # ── evaluate on test set ──
+    # Evaluate on test set.
     test_loader = make_loader(X_test, y_test, best["batch_size"], shuffle=False)
     y_prob, y_true = get_predictions(final_model, test_loader, device)
     y_pred = (y_prob >= 0.5).astype(int)

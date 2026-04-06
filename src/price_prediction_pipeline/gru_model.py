@@ -241,6 +241,7 @@ def train_gru(
     model_path = model_dir / "gru_best.pt"
     torch.save({"model_state_dict": final_model.state_dict(), "params": best, "input_dim": input_dim}, model_path)
 
+    # Evaluate on test set.
     test_loader = make_loader(X_test, y_test, best["batch_size"], shuffle=False)
     y_prob, y_true = get_predictions(final_model, test_loader, device)
     y_pred = (y_prob >= 0.5).astype(int)

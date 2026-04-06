@@ -54,6 +54,22 @@ TECH_INDICATOR_COLS = [
     "volume_sma_20", "volume_ratio"
 ]
 
+FEATURE_PRESET_REGISTRY = {
+    # Keep the current full feature set as the default baseline.
+    "full": list(dict.fromkeys(SEQUENCE_FEATURE_COLS + TECH_INDICATOR_COLS)), 
+    # Prefer relative / scale-free indicators for pooled multi-ticker training.
+    "relative_only": list(dict.fromkeys(SEQUENCE_FEATURE_COLS + [
+        "close_vs_sma_5", "close_vs_sma_10", "close_vs_sma_20", 
+        "close_vs_ema_5", "close_vs_ema_10", "close_vs_ema_20", 
+        "rsi_14", 
+        "macd", "macd_signal", "macd_hist", 
+        "momentum_10_pct", 
+        "bb_width", "bb_percent_b", 
+        "atr_ratio", 
+        "volume_ratio"
+    ]))
+}
+
 def get_sequence_feature_columns():
     return list(SEQUENCE_FEATURE_COLS)
 
@@ -62,6 +78,12 @@ def get_basic_feature_columns():
 
 def get_technical_indicator_columns():
     return list(TECH_INDICATOR_COLS)
+
+def get_feature_preset_columns(feature_preset: str = "full"):
+    if (feature_preset not in FEATURE_PRESET_REGISTRY):
+        valid = sorted(FEATURE_PRESET_REGISTRY.keys())
+        raise ValueError(f"Unknown feature_preset '{feature_preset}'. Valid options: {valid}")
+    return list(FEATURE_PRESET_REGISTRY[feature_preset])
 
 def safe_divide(numerator: pd.Series, denominator: pd.Series | float | int):
     if (isinstance(denominator, pd.Series)):
@@ -236,13 +258,10 @@ def compute_technical_indicators(df: pd.DataFrame):
     df["volume_ratio"] = safe_divide(volume, volume_sma_20)
     return df
 
-def get_all_model_feature_columns():
-    return list(dict.fromkeys(SEQUENCE_FEATURE_COLS + TECH_INDICATOR_COLS))
-
 def finalize_feature_table( df: pd.DataFrame, required_feature_cols: list[str] | None = None):
     df = replace_inf_with_nan(df)
     if (required_feature_cols is None):
-        required_feature_cols = get_all_model_feature_columns()
+        required_feature_cols = get_feature_preset_columns("full")
     cols_in_df = [c for c in required_feature_cols if (c in df.columns)]
     df = df.dropna(subset=cols_in_df).reset_index(drop=True)
     return df

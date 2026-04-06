@@ -1,7 +1,7 @@
 from pathlib import Path
 import numpy as np
 import pandas as pd
-from feature_engineering import get_all_model_feature_columns
+from feature_engineering import get_feature_preset_columns
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -40,7 +40,7 @@ def build_windows_for_ticker(ticker_df: pd.DataFrame, lookback: int, feature_col
 
 def combine_all_tickers(feature_df: pd.DataFrame, lookback: int, feature_cols: list[str] | None = None):
     if (feature_cols is None):
-        feature_cols = get_all_model_feature_columns()
+        feature_cols = get_feature_preset_columns("full")
     all_X, all_y, all_meta = [], [], []
     # Collect samples from all tickers.
     tickers = sorted(feature_df["Ticker"].unique())
@@ -139,6 +139,7 @@ def load_dataset(data_dir: str | Path):
 def build_dataset(
     feature_path: str | Path | None = None, 
     output_dir: str | Path | None = None, 
+    feature_preset: str = "full", 
     lookback: int = 30, 
     train_ratio: float = 0.70, 
     val_ratio: float = 0.15
@@ -146,13 +147,14 @@ def build_dataset(
     if (feature_path is None):
         feature_path = PROJECT_ROOT / "data" / "processed" / "stock" / "features" / "all_features.csv"
     if (output_dir is None):
-        output_dir = PROJECT_ROOT / "data" / "processed" / "stock" / "dataset"
+        output_dir = PROJECT_ROOT / "data" / "processed" / "stock" / "dataset" / f"{feature_preset}_lb{lookback}"
     feature_path = Path(feature_path)
     output_dir = Path(output_dir)
     feature_df = pd.read_csv(feature_path, parse_dates=["Date"])
+    feature_cols = get_feature_preset_columns(feature_preset)
 
-    # Build windowed samples using all features (sequence + technical indicators combined).
-    X, y, meta_df = combine_all_tickers(feature_df, lookback)
+    # Build windowed samples using the specified feature preset.
+    X, y, meta_df = combine_all_tickers(feature_df, lookback, feature_cols)
 
     # Time-based split.
     splits = time_based_split(X, y, meta_df, train_ratio, val_ratio)

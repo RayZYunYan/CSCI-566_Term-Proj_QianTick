@@ -36,7 +36,6 @@ data/cache/
 outputs/
 checkpoints/
 *.pth
-*.pt
 *.h5
 *.ckpt
 
