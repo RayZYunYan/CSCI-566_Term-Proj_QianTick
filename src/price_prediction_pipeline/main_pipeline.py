@@ -4,6 +4,7 @@ from feature_engineering import engineer_features_all
 from dataset_builder import build_dataset
 from lstm_model import train_lstm
 from gru_model import train_gru
+from tcn_model import train_tcn
 from fusion_interface import export_price_features
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -71,13 +72,13 @@ def price_prediction_task(
 
     if (if_train_tcn):
         print("[TRAIN TCN]\n")
-        # train_tcn(
-        #     data_dir=data_dir,
-        #     n_trials=n_trials,
-        #     max_epochs_per_trial=max_epochs_per_trial,
-        #     max_epochs_final=max_epochs_final,
-        #     patience=patience
-        # )
+        train_tcn(
+            data_dir=data_dir,
+            n_trials=n_trials,
+            max_epochs_per_trial=max_epochs_per_trial,
+            max_epochs_final=max_epochs_final,
+            patience=patience
+        )
 
     print("[PRICE PREDICTION TASK COMPLETE]\n")
 
