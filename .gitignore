@@ -38,7 +38,7 @@ checkpoints/
 *.pth
 *.h5
 *.ckpt
-.npz
+src/price_prediction_pipeline/data/processed/stock/dataset
 
 # Jupyter
 .ipynb_checkpoints/
