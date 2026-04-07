@@ -38,6 +38,7 @@ checkpoints/
 *.pth
 *.h5
 *.ckpt
+.npz
 
 # Jupyter
 .ipynb_checkpoints/
