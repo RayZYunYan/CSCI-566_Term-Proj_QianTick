@@ -44,25 +44,38 @@ class TCNBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, dilation, dropout, activation="gelu"):
         super().__init__()
         act_cls = ACTIVATION_REGISTRY.get(activation, nn.GELU)
-        self.conv = CausalConv1d(in_channels, out_channels, kernel_size, dilation=dilation)
-        self.bn = nn.BatchNorm1d(out_channels)
-        self.act = act_cls()
-        self.dropout = nn.Dropout(dropout)
-        
+        # two causal conv layers per block (as in original TCN paper)
+        # conv1: in_channels -> out_channels
+        # conv2: out_channels -> out_channels (same dilation)
+        self.conv1 = CausalConv1d(in_channels, out_channels, kernel_size, dilation=dilation)
+        self.bn1 = nn.BatchNorm1d(out_channels)
+        self.act1 = act_cls()
+        self.drop1 = nn.Dropout(dropout)
+
+        self.conv2 = CausalConv1d(out_channels, out_channels, kernel_size, dilation=dilation)
+        self.bn2 = nn.BatchNorm1d(out_channels)
+        self.act2 = act_cls()
+        self.drop2 = nn.Dropout(dropout)
+
         # If in_channels != out_channels, we need a 1x1 conv to match dimensions for the residual connection.
         self.downsample = None
         if in_channels != out_channels:
             self.downsample = nn.Conv1d(in_channels, out_channels, kernel_size=1)
 
     def forward(self, x):
-        out = self.conv(x)
-        out = self.bn(out)
-        out = self.act(out)
-        out = self.dropout(out)
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.act1(out)
+        out = self.drop1(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.act2(out)
+        out = self.drop2(out)
 
         # connect residual and check if downsample is needed
         res = x if self.downsample is None else self.downsample(x)
-        
+
         return out + res
 
 
