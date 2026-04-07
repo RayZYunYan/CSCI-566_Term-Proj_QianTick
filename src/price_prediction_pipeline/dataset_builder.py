@@ -3,7 +3,8 @@ import numpy as np
 import pandas as pd
 from feature_engineering import get_feature_preset_columns
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PIPELINE_ROOT = Path(__file__).resolve().parent
+DATA_ROOT = PIPELINE_ROOT / "data"
 
 def build_windows_for_ticker(ticker_df: pd.DataFrame, lookback: int, feature_cols: list[str]):
     # Sort rows by date in ascending order and reset the row index.
@@ -145,9 +146,9 @@ def build_dataset(
     val_ratio: float = 0.15
 ):
     if (feature_path is None):
-        feature_path = PROJECT_ROOT / "data" / "processed" / "stock" / "features" / "all_features.csv"
+        feature_path = DATA_ROOT / "processed" / "stock" / "features" / "all_features.csv"
     if (output_dir is None):
-        output_dir = PROJECT_ROOT / "data" / "processed" / "stock" / "dataset" / f"{feature_preset}_lb{lookback}"
+        output_dir = DATA_ROOT / "processed" / "stock" / "dataset" / f"{feature_preset}_lb{lookback}"
     feature_path = Path(feature_path)
     output_dir = Path(output_dir)
     feature_df = pd.read_csv(feature_path, parse_dates=["Date"])

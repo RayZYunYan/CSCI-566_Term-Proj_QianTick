@@ -9,7 +9,7 @@ import optuna # For Bayesian hyperparameter optimization
 from dataset_builder import load_dataset
 from metrics import compute_classification_metrics, save_metrics
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PIPELINE_ROOT = Path(__file__).resolve().parent
 ACTIVATION_REGISTRY = {"relu": nn.ReLU, "gelu": nn.GELU, "silu": nn.SiLU}
 
 class LSTMClassifier(nn.Module):
@@ -156,8 +156,8 @@ def load_lstm_model(model_path: str | Path, device: str = "cpu"):
 
 @torch.no_grad()
 def predict_lstm(model_path: str | Path, data_dir: str | Path | None = None, split: str = "test", device: str = "cpu", batch_size: int = 512):
-    if data_dir is None:
-        data_dir = PROJECT_ROOT / "data" / "processed" / "stock" / "dataset"
+    if (data_dir is None):
+        raise ValueError("data_dir must be provided explicitly. Use main_pipeline.py to select the dataset from feature_preset and lookback.")
     model = load_lstm_model(model_path, device)
     splits, _ = load_dataset(data_dir)
     loader = make_loader(splits[split]["X"], splits[split]["y"], batch_size, shuffle=False)
@@ -170,7 +170,7 @@ def predict_lstm(model_path: str | Path, data_dir: str | Path | None = None, spl
 def extract_lstm_features(model_path: str | Path, data_dir: str | Path | None = None, split: str = "test", device: str = "cpu", batch_size: int = 512):
     # Load a saved LSTM and return feature vectors of shape (N, hidden_dim).
     if (data_dir is None):
-        data_dir = PROJECT_ROOT / "data" / "processed" / "stock" / "dataset"
+        raise ValueError("data_dir must be provided explicitly. Use main_pipeline.py to select the dataset from feature_preset and lookback.")
     model = load_lstm_model(model_path, device)
     splits, _ = load_dataset(data_dir)
     X = splits[split]["X"]
@@ -195,9 +195,9 @@ def train_lstm(
     seed: int = 68
 ):
     if (data_dir is None):
-        data_dir = PROJECT_ROOT / "data" / "processed" / "stock" / "dataset"
+        raise ValueError("data_dir must be provided explicitly. Use main_pipeline.py to select the dataset from feature_preset and lookback.")
     if (output_dir is None):
-        output_dir = PROJECT_ROOT / "src" / "price_prediction_pipeline" / "outputs"
+        output_dir = PIPELINE_ROOT / "outputs"
     data_dir, output_dir = Path(data_dir), Path(output_dir)
     model_dir = output_dir / "models"
     metrics_dir = output_dir / "metrics"

@@ -4,11 +4,12 @@ from datetime import datetime, timedelta
 import pandas as pd
 import yfinance as yf
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PIPELINE_ROOT = Path(__file__).resolve().parent
+DATA_ROOT = PIPELINE_ROOT / "data"
 PRIMARY_TICKERS = ["AAPL", "MSFT", "GOOGL", "NVDA", "TSLA", "META", "AMZN", "AMD", "INTC", "CRM", "NFLX", "AVGO", "ORCL", "ADBE"]
 MARKET_CONTEXT_TICKERS = ["SPY", "QQQ", "^VIX", "XLK", "SOXX", "TLT"]
 DEFAULT_START_DATE = "2018-01-01"
-DEFAULT_RAW_DIR = PROJECT_ROOT / "data" / "raw" / "stock"
+DEFAULT_RAW_DIR = DATA_ROOT / "raw" / "stock"
 
 def download_single_ticker(
     ticker: str, 

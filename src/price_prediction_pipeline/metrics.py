@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score, confusion_matrix
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PIPELINE_ROOT = Path(__file__).resolve().parent
 
 def compute_classification_metrics(y_true, y_pred, y_prob):
     """
@@ -44,7 +44,7 @@ def compare_model_metrics(
     output_path: str | Path | None = None
 ):
     if (metrics_dir is None):
-        metrics_dir = PROJECT_ROOT / "src" / "price_prediction_pipeline" / "outputs" / "metrics"
+        metrics_dir = PIPELINE_ROOT / "outputs" / "metrics"
     metrics_dir = Path(metrics_dir)
     if (model_names is None):
         model_names = ["lstm", "gru", "tcn"]

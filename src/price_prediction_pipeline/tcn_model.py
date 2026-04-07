@@ -11,9 +11,8 @@ from sklearn.metrics import roc_auc_score
 from dataset_builder import load_dataset
 from metrics import compute_classification_metrics, save_metrics
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PIPELINE_ROOT = Path(__file__).resolve().parent
 ACTIVATION_REGISTRY = {"relu": nn.ReLU, "gelu": nn.GELU, "silu": nn.SiLU}
-
 
 class CausalConv1d(nn.Module):
     """
@@ -290,10 +289,10 @@ def load_tcn_model(model_path: str | Path, device: str = "cpu"):
 @torch.no_grad()
 def predict_tcn(model_path: str | Path, data_dir: str | Path | None = None, split: str = "test", device: str = "cpu", batch_size: int = 512):
     """
-    Loads a trained TCN model and returns predicted probabilities, true labels, and binary predictions for the specified dataset split.
+    Loads a trained TCN model and returns predicted probabilities, binary predictions, and true labels for the specified dataset split.
     """
     if (data_dir is None):
-        data_dir = PROJECT_ROOT / "data" / "processed" / "stock" / "dataset" / "full_lb30"
+        raise ValueError("data_dir must be provided explicitly. Use main_pipeline.py to select the dataset from feature_preset and lookback.")
     
     model = load_tcn_model(model_path, device)
     splits, _ = load_dataset(data_dir)
@@ -301,7 +300,7 @@ def predict_tcn(model_path: str | Path, data_dir: str | Path | None = None, spli
     y_prob, y_true = get_predictions(model, loader, device)
     y_pred = (y_prob >= 0.5).astype(int)
     
-    return y_prob, y_true, y_pred
+    return y_prob, y_pred, y_true
 
 
 @torch.no_grad()
@@ -310,7 +309,7 @@ def extract_tcn_features(model_path: str | Path, data_dir: str | Path | None = N
     Loads a trained TCN model and returns the extracted features from the TCN layers for the specified dataset split.
     """
     if (data_dir is None):
-        data_dir = PROJECT_ROOT / "data" / "processed" / "stock" / "dataset" / "full_lb30"
+        raise ValueError("data_dir must be provided explicitly. Use main_pipeline.py to select the dataset from feature_preset and lookback.")
     
     model = load_tcn_model(model_path, device)
     splits, _ = load_dataset(data_dir)
@@ -339,10 +338,10 @@ def train_tcn(
     Trains a TCN model with Optuna hyperparameter tuning and saves the best model and metrics.
     """
     if (data_dir is None):
-        data_dir = PROJECT_ROOT / "data" / "processed" / "stock" / "dataset" / "full_lb30"
+        raise ValueError("data_dir must be provided explicitly. Use main_pipeline.py to select the dataset from feature_preset and lookback.")
     
     if (output_dir is None):
-        output_dir = PROJECT_ROOT / "outputs"
+        output_dir = PIPELINE_ROOT / "outputs"
     
     # Set up directories, device, and random seeds for reproducibility.
     data_dir, output_dir = Path(data_dir), Path(output_dir)

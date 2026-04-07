@@ -4,7 +4,8 @@ from typing import Iterable
 import numpy as np
 import pandas as pd
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PIPELINE_ROOT = Path(__file__).resolve().parent
+DATA_ROOT = PIPELINE_ROOT / "data"
 REQUIRED_RAW_COLS = ["Date", "Ticker", "Open", "High", "Low", "Close", "Volume"]
 
 # Keep the original basic feature names for continuity with your current pipeline.
@@ -277,9 +278,9 @@ def engineer_features_single_ticker(ticker_df: pd.DataFrame):
 
 def engineer_features_all(input_path: str | Path | None = None, output_dir: str | Path | None = None):
     if (input_path is None):
-        input_path = PROJECT_ROOT / "data" / "raw" / "stock" / "all_stocks.csv"
+        input_path = DATA_ROOT / "raw" / "stock" / "all_stocks.csv"
     if (output_dir is None):
-        output_dir = PROJECT_ROOT / "data" / "processed" / "stock" / "features"
+        output_dir = DATA_ROOT / "processed" / "stock" / "features"
     input_path = Path(input_path)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

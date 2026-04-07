@@ -5,9 +5,9 @@ import torch
 from dataset_builder import load_dataset
 from lstm_model import extract_lstm_features, predict_lstm
 from gru_model import extract_gru_features, predict_gru
-# from tcn_model import load_tcn_model, extract_tcn_features, predict_tcn
+from tcn_model import extract_tcn_features, predict_tcn
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PIPELINE_ROOT = Path(__file__).resolve().parent
 
 def auto_device():
     if (torch.cuda.is_available()):
@@ -25,11 +25,11 @@ def export_price_features(
     batch_size: int = 512
 ):
     if (data_dir is None):
-        data_dir = PROJECT_ROOT / "data" / "processed" / "stock" / "dataset"
+        raise ValueError("data_dir must be provided explicitly. Use main_pipeline.py to select the dataset from feature_preset and lookback.")
     if (model_dir is None):
-        model_dir = PROJECT_ROOT / "src" / "price_prediction_pipeline" / "outputs" / "models"
+        model_dir = PIPELINE_ROOT / "outputs" / "models"
     if (output_dir is None):
-        output_dir = PROJECT_ROOT / "src" / "price_prediction_pipeline" / "export_to_fusion"
+        output_dir = PIPELINE_ROOT / "export_to_fusion"
     data_dir, model_dir, output_dir = Path(data_dir), Path(model_dir), Path(output_dir)
     features_dir = output_dir / "features"
     predictions_dir = output_dir / "predictions"
@@ -62,8 +62,8 @@ def export_price_features(
     if (tcn_path.exists()):
         model_configs["tcn"] = {
             "model_path": tcn_path, 
-            # "extract_fn": extract_tcn_features, 
-            # "predict_fn": predict_tcn
+            "extract_fn": extract_tcn_features, 
+            "predict_fn": predict_tcn
         }
 
     if (not model_configs):

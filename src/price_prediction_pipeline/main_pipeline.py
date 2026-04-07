@@ -7,10 +7,11 @@ from gru_model import train_gru
 from tcn_model import train_tcn
 from fusion_interface import export_price_features
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+PIPELINE_ROOT = Path(__file__).resolve().parent
+DATA_ROOT = PIPELINE_ROOT / "data"
 
 def get_dataset_dir(feature_preset: str, lookback: int):
-    return PROJECT_ROOT / "data" / "processed" / "stock" / "dataset" / f"{feature_preset}_lb{lookback}"
+    return DATA_ROOT / "processed" / "stock" / "dataset" / f"{feature_preset}_lb{lookback}"
 
 def data_preprocessing(
     if_fetch_data: bool = True, 
