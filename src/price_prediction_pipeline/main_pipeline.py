@@ -13,9 +13,9 @@ def get_dataset_dir(feature_preset: str, lookback: int):
     return PROJECT_ROOT / "data" / "processed" / "stock" / "dataset" / f"{feature_preset}_lb{lookback}"
 
 def data_preprocessing(
-    if_fetch_data: bool = False, 
-    if_feature_engineering: bool = False, 
-    if_build_dataset: bool = False, 
+    if_fetch_data: bool = True, 
+    if_feature_engineering: bool = True, 
+    if_build_dataset: bool = True, 
     feature_preset: str = "full", 
     lookback: int = 30
 ):
@@ -35,9 +35,9 @@ def data_preprocessing(
     print("[DATA PREPROCESSING COMPLETE]\n")
 
 def price_prediction_task(
-    if_train_lstm: bool = False, 
-    if_train_gru: bool = False, 
-    if_train_tcn: bool = False, 
+    if_train_lstm: bool = True, 
+    if_train_gru: bool = True, 
+    if_train_tcn: bool = True, 
     feature_preset: str = "full", 
     lookback: int = 30, 
     n_trials: int = 50, 
@@ -83,7 +83,7 @@ def price_prediction_task(
     print("[PRICE PREDICTION TASK COMPLETE]\n")
 
 def export_features_for_fusion(
-    if_export: bool = False, 
+    if_export: bool = True, 
     split: str = "test", 
     feature_preset: str = "full", 
     lookback: int = 30, 
@@ -98,20 +98,20 @@ def export_features_for_fusion(
 
 if __name__ == "__main__":
     feature_preset = "relative_only"
-    lookback = 30
+    lookback = 50
 
     # For feature_preset, options include: "full", "relative_only".
     data_preprocessing(
         if_fetch_data=False, 
         if_feature_engineering=False, 
-        if_build_dataset=True, 
+        if_build_dataset=False, 
         feature_preset=feature_preset, 
         lookback=lookback
     )
     price_prediction_task(
-        if_train_lstm=True, 
-        if_train_gru=True, 
-        if_train_tcn=True, 
+        if_train_lstm=False, 
+        if_train_gru=False, 
+        if_train_tcn=False, 
         feature_preset=feature_preset, 
         lookback=lookback, 
         n_trials=50, 
@@ -119,4 +119,4 @@ if __name__ == "__main__":
         max_epochs_final=300, 
         patience=20
     )
-    export_features_for_fusion(if_export=True, feature_preset=feature_preset, lookback=lookback)
+    export_features_for_fusion(if_export=False, feature_preset=feature_preset, lookback=lookback)
