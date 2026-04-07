@@ -25,25 +25,16 @@ class FinBERTEncoder(nn.Module):
     对批量新闻文本输出 771 维特征向量（768-dim [CLS] + 3-dim sentiment 拼接）。
     FinBERT 权重冻结，仅作特征提取。
 
-    TODO (子任务 B)：
-        1. 实现 encode()：
-               tokenize（max_length=512, truncation=True）
-               → bert.forward()
-               → 提取 hidden_states[:, 0, :] 作为 [CLS]（768 维）
-               → 提取 logits 经 softmax 作为 sentiment（3 维）
-               → torch.cat([cls_emb, sentiment], dim=-1) 得到 (N, 771)
-        2. 实现 encode_and_save()：
-               批量编码 news_cleaned.parquet 中的所有文章
-               断点续跑：每编码 checkpoint_every 篇追加保存到临时文件
-               重启时跳过已编码的 article_id
-               最终输出 news_article_embeddings.parquet
-
     Mock 接口（供 C 开发时使用，无需加载真实模型）：
         mock_output = torch.randn(N, 771)
         mock_output[:, 768:] = torch.softmax(mock_output[:, 768:], dim=-1)
     """
 
-    def __init__(self, model_name: str = FINBERT_MODEL, device: str = "cpu"):
+    def __init__(
+        self,
+        model_name: str = FINBERT_MODEL,
+        device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    ):
         super().__init__()
         self.device = torch.device(device)
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -84,6 +75,9 @@ class FinBERTEncoder(nn.Module):
 
         return features.to(torch.float32)
 
+    def forward(self, texts: list[str]) -> torch.Tensor:
+        return self.encode(texts)
+
     def encode_and_save(
         self,
         cleaned_parquet: str,
@@ -97,12 +91,7 @@ class FinBERTEncoder(nn.Module):
         输出 schema：
             ticker (str), date (str YYYY-MM-DD), article_id (str),
             feat_0 ~ feat_770 (float)
-
-        TODO (子任务 B)：
-            - 读取 cleaned_parquet，检查 output_parquet 已存在的 article_id（断点续跑）
-            - 分批调用 encode()，每 checkpoint_every 篇追加写入 output_parquet
         """
-        # TODO: 实现断点续跑批量编码
         cleaned_parquet = Path(cleaned_parquet)
         output_parquet = Path(output_parquet)
 
@@ -118,7 +107,7 @@ class FinBERTEncoder(nn.Module):
         if missing_cols:
             raise ValueError(f"Missing required columns: {missing_cols}")
 
-        df["ticker"] = df["ticker"].astype(str)
+        df["ticker"] = df["ticker"].astype(str).str.upper()
         df["date"] = df["date"].astype(str)
         df["article_id"] = df["article_id"].astype(str)
         df["headline"] = df["headline"].fillna("").astype(str)
