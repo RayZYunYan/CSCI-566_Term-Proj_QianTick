@@ -7,7 +7,7 @@
 
 # Core ML
 torch==2.8.0
-transformers==4.57.6
+transformers==5.0.0rc3
 
 # Data
 yfinance==1.2.0
