@@ -43,9 +43,7 @@ class TCNBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, dilation, dropout, activation="gelu"):
         super().__init__()
         act_cls = ACTIVATION_REGISTRY.get(activation, nn.GELU)
-        # two causal conv layers per block (as in original TCN paper)
-        # conv1: in_channels -> out_channels
-        # conv2: out_channels -> out_channels (same dilation)
+        # two causal conv layers per block
         self.conv1 = CausalConv1d(in_channels, out_channels, kernel_size, dilation=dilation)
         self.bn1 = nn.BatchNorm1d(out_channels)
         self.act1 = act_cls()
