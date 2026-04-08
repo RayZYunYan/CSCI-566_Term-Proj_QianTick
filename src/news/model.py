@@ -28,7 +28,7 @@ class NewsUnimodalBaseline(nn.Module):
             nn.Linear(hidden_dim, 64),
             nn.ReLU(),
             nn.Linear(64, 1),
-            nn.Sigmoid(),
+            #nn.Sigmoid(),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
