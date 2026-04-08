@@ -8,14 +8,19 @@ News Unimodal Baseline Training
 """
 
 import argparse
-import yaml
-import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader
-import numpy as np
+import json
+import os
 import random
 
-from src.news.dataset import NewsFeatureDataset  # 读取预提取的 771 维特征
+import numpy as np
+import pandas as pd
+import torch
+import torch.nn as nn
+import yaml
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+from torch.utils.data import DataLoader
+
+from src.news.dataset import NewsFeatureDataset
 from src.news.model import NewsUnimodalBaseline
 
 RANDOM_SEED = 42
@@ -27,24 +32,146 @@ def set_seed(seed: int = RANDOM_SEED):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
+def evaluate(model: nn.Module, loader: DataLoader, device: torch.device):
+    model.eval()
+    criterion = nn.BCEWithLogitsLoss()
+
+    all_probs = []
+    all_labels = []
+    total_loss = 0.0
+
+    with torch.no_grad():
+        for x, y in loader:
+            x = x.to(device)
+            y = y.to(device).float()
+
+            logits = model(x)
+            loss = criterion(logits, y)
+            total_loss += loss.item()
+
+            probs = torch.sigmoid(logits)
+            all_probs.extend(probs.cpu().numpy().flatten())
+            all_labels.extend(y.cpu().numpy().flatten())
+
+    preds = [1 if p >= 0.5 else 0 for p in all_probs]
+
+    return {
+        'loss': total_loss / max(1, len(loader)),
+        'accuracy': accuracy_score(all_labels, preds),
+        'precision': precision_score(all_labels, preds, zero_division=0),
+        'recall': recall_score(all_labels, preds, zero_division=0),
+        'f1': f1_score(all_labels, preds, zero_division=0),
+        'roc_auc': roc_auc_score(all_labels, all_probs) if len(set(all_labels)) > 1 else float('nan'),
+        'probs': all_probs,
+        'preds': preds,
+        'labels': all_labels,
+    }
 
 def train(config: dict):
     set_seed()
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Device: {device}")
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    os.makedirs('outputs/news_baseline', exist_ok=True)
 
-    # TODO: 初始化 Dataset 和 DataLoader
-    # train_ds = NewsDataset(split="train")
-    # val_ds   = NewsDataset(split="val")
+    train_ds = NewsFeatureDataset(
+        features_path=config['features_path'],
+        labels_path=config['labels_path'],
+        split='train',
+    )
+    val_ds = NewsFeatureDataset(
+        features_path=config['features_path'],
+        labels_path=config['labels_path'],
+        split='val',
+    )
+    test_ds = NewsFeatureDataset(
+        features_path=config['features_path'],
+        labels_path=config['labels_path'],
+        split='test',
+    )
 
-    # TODO: 初始化模型
-    # model = NewsUnimodalBaseline(...).to(device)
+    train_loader = DataLoader(train_ds, batch_size=config['batch_size'], shuffle=True)
+    val_loader = DataLoader(val_ds, batch_size=256, shuffle=False)
+    test_loader = DataLoader(test_ds, batch_size=256, shuffle=False)
 
-    # TODO: 训练循环
-    # - optimizer, scheduler
-    # - train epoch → val epoch
-    # - 保存最优 checkpoint 到 checkpoints/news_best.pt
-    raise NotImplementedError
+    model = NewsUnimodalBaseline(
+        input_dim=771,
+        hidden_dim=config.get('hidden_dim', 256),
+    ).to(device)
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=config['lr'])
+    criterion = nn.BCEWithLogitsLoss()
+
+    best_val_loss = float('inf')
+    patience_counter = 0
+    logs = []
+
+    for epoch in range(config['epochs']):
+        model.train()
+        train_loss = 0.0
+
+        for x, y in train_loader:
+            x = x.to(device)
+            y = y.to(device).float()
+
+            optimizer.zero_grad(set_to_none=True)
+            logits = model(x)
+            loss = criterion(logits, y)
+            loss.backward()
+            optimizer.step()
+
+            train_loss += loss.item()
+
+        val_metrics = evaluate(model, val_loader, device)
+
+        logs.append({
+            'epoch': epoch + 1,
+            'train_loss': train_loss / max(1, len(train_loader)),
+            'val_loss': val_metrics['loss'],
+            'val_acc': val_metrics['accuracy'],
+        })
+
+        print(
+            f"Epoch {epoch + 1} | "
+            f"train_loss={logs[-1]['train_loss']:.4f} | "
+            f"val_loss={val_metrics['loss']:.4f} | "
+            f"val_f1={val_metrics['f1']:.4f}"
+        )
+
+        if val_metrics['loss'] < best_val_loss:
+            best_val_loss = val_metrics['loss']
+            patience_counter = 0
+            torch.save(model.state_dict(), 'outputs/news_baseline/best_model.pt')
+        else:
+            patience_counter += 1
+
+        if patience_counter >= config['patience']:
+            print('Early stopping triggered.')
+            break
+
+    model.load_state_dict(torch.load('outputs/news_baseline/best_model.pt', map_location=device))
+    test_metrics = evaluate(model, test_loader, device)
+
+    with open('outputs/news_baseline/metrics.json', 'w', encoding='utf-8') as f:
+        json.dump(
+            {k: v for k, v in test_metrics.items() if k not in ('probs', 'preds', 'labels')},
+            f,
+            indent=2,
+            ensure_ascii=False,
+        )
+
+    pd.DataFrame(logs).to_csv('outputs/news_baseline/training_log.csv', index=False)
+
+    pred_df = pd.DataFrame({
+        'ticker': test_ds.df['ticker'].values,
+        'date': test_ds.df['date'].astype(str).values,
+        'prob': test_metrics['probs'],
+        'pred_label': test_metrics['preds'],
+        'true_label': test_metrics['labels'],
+    })
+
+    try:
+        pred_df.to_parquet('outputs/news_baseline/predictions.parquet', index=False)
+    except Exception:
+        pred_df.to_csv('outputs/news_baseline/predictions.csv', index=False)
 
 
 def main():
