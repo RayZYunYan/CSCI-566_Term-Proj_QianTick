@@ -65,3 +65,5 @@ logs/
 *.temp
 # Claude Code
 .claude/
+
+.tmp_pdf_pages/
