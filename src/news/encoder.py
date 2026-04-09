@@ -112,15 +112,21 @@ class FinBERTEncoder(nn.Module):
         df["article_id"] = df["article_id"].astype(str)
         df["headline"] = df["headline"].fillna("").astype(str)
 
-        df = df.drop_duplicates(subset=["article_id"]).reset_index(drop=True)
+        df = df.drop_duplicates(subset=["article_id", "date"]).reset_index(drop=True)
 
-        existing_ids = set()
+        existing_pairs = set()
         if output_parquet.exists():
-            old_df = pd.read_parquet(output_parquet, columns=["article_id"])
-            existing_ids = set(old_df["article_id"].astype(str).tolist())
+            old_df = pd.read_parquet(output_parquet, columns=["article_id", "date"])
+            existing_pairs = set(
+                zip(old_df["article_id"].astype(str), old_df["date"].astype(str))
+            )
 
-        if existing_ids:
-            df = df[~df["article_id"].isin(existing_ids)].reset_index(drop=True)
+        if existing_pairs:
+            mask = [
+                (str(a), str(d)) not in existing_pairs
+                for a, d in zip(df["article_id"], df["date"])
+            ]
+            df = df[mask].reset_index(drop=True)
 
         if df.empty:
             print("No new articles to encode. Output is already up to date.")
@@ -142,7 +148,7 @@ class FinBERTEncoder(nn.Module):
             if output_parquet.exists():
                 existing_df = pd.read_parquet(output_parquet)
                 merged_df = pd.concat([existing_df, chunk_df], ignore_index=True)
-                merged_df = merged_df.drop_duplicates(subset=["article_id"], keep="last")
+                merged_df = merged_df.drop_duplicates(subset=["article_id", "date"], keep="last")
                 merged_df.to_parquet(output_parquet, index=False)
             else:
                 chunk_df.to_parquet(output_parquet, index=False)
