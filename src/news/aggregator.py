@@ -4,7 +4,7 @@ News Feature Aggregator + Feature Extraction Pipeline (子任务 C)
 输入：news_article_embeddings.parquet（子任务 B 的输出），每行 771 维
 输出：news_features.parquet，MultiIndex (ticker, date)，列 feat_0~feat_770
 
-负责人：子任务 C
+负责人：Yunfei Wang
 对应文件：src/news/aggregator.py, src/news/feature_extractor.py
 """
 
@@ -47,7 +47,7 @@ class NewsFeatureAggregator(nn.Module):
         assert mode in ("mean", "attention"), f"Unknown mode: {mode}"
         self.mode = mode
         self.feature_dim = feature_dim
-        if mode == "attention":
+        if mode == "attention":   # Create a learnable parameter
             self.attn_w = nn.Parameter(torch.randn(feature_dim))
 
     def forward(self, article_embeddings: torch.Tensor) -> torch.Tensor:
@@ -58,6 +58,7 @@ class NewsFeatureAggregator(nn.Module):
         Returns:
             feature: (771,)
         """
+        # input validation
         if article_embeddings.ndim != 2:
             raise ValueError(
                 f"article_embeddings must be 2D (N, D), got shape {tuple(article_embeddings.shape)}"
@@ -67,7 +68,7 @@ class NewsFeatureAggregator(nn.Module):
                 f"feature_dim mismatch: expected {self.feature_dim}, got {article_embeddings.shape[1]}"
             )
 
-        n = article_embeddings.shape[0]
+        n = article_embeddings.shape[0]   # number of articles in the window
         if n == 0:
             return torch.zeros(
                 self.feature_dim,
@@ -77,13 +78,16 @@ class NewsFeatureAggregator(nn.Module):
         if n == 1:
             return article_embeddings[0]
         if n > 50:
+            # only keep the most recent 50 articles
             article_embeddings = article_embeddings[-50:]
 
-        if self.mode == "mean":
-            return article_embeddings.mean(dim=0)
-
-        scores = torch.softmax(article_embeddings @ self.attn_w, dim=0)  # (N,)
-        return (scores.unsqueeze(-1) * article_embeddings).sum(dim=0)
+        # attention mode
+        if self.mode == "attention":
+            scores = torch.softmax(article_embeddings @ self.attn_w, dim=0)  # (N,)
+            return (scores.unsqueeze(-1) * article_embeddings).sum(dim=0)
+        # mean mode 
+        return article_embeddings.mean(dim=0)
+        
 
 
 def _load_price_coverage_pairs(config: dict, article_df: pd.DataFrame) -> pd.DataFrame:
