@@ -73,7 +73,7 @@ class NewsFeatureDataset(Dataset):
         """
         assert split in ("train", "val", "test")
         self.split = split
-        self.samples = self._load(features_path, labels_path)
+        self.samples, self.df = self._load(features_path, labels_path)
 
     def _load(self, features_path: str, labels_path: str) -> list:
         feats = pd.read_parquet(features_path)
@@ -99,7 +99,8 @@ class NewsFeatureDataset(Dataset):
             feat = torch.tensor(row[FEAT_COLS].values.astype("float32"))  # (771,)
             label = torch.tensor([int(row["label"])], dtype=torch.float32)  # (1,)
             samples.append((feat, label))
-        return samples
+        meta = merged[["ticker", "date"]].reset_index(drop=True)
+        return samples, meta
 
     def __len__(self):
         return len(self.samples)

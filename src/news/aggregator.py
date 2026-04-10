@@ -94,21 +94,14 @@ def _load_price_coverage_pairs(config: dict, article_df: pd.DataFrame) -> pd.Dat
     """
     Build mandatory (ticker, date) coverage list.
     Priority:
-      1) labels.parquet if available
-      2) price_features.parquet if available
+      1) price_features.parquet (from config) — primary per PDF spec
+      2) labels.parquet if price not available
       3) fallback to article embedding date span x configured tickers
     """
     data_cfg = config.get("data", {})
-    labels_path = Path(data_cfg.get("labels", ""))
-    if labels_path.exists():
-        labels_df = pd.read_parquet(labels_path)
-        if {"ticker", "date"}.issubset(labels_df.columns):
-            pairs = labels_df[["ticker", "date"]].copy()
-            pairs["ticker"] = pairs["ticker"].astype(str).str.upper()
-            pairs["date"] = pd.to_datetime(pairs["date"]).dt.strftime("%Y-%m-%d")
-            return pairs.drop_duplicates().reset_index(drop=True)
 
-    price_feat_path = Path("data/features/price_features.parquet")
+    # 1) price_features — primary source per PDF
+    price_feat_path = Path(data_cfg.get("price_features", ""))
     if price_feat_path.exists():
         pf = pd.read_parquet(price_feat_path)
         if {"ticker", "date"}.issubset(pf.columns):
@@ -122,6 +115,17 @@ def _load_price_coverage_pairs(config: dict, article_df: pd.DataFrame) -> pd.Dat
             pairs["date"] = pd.to_datetime(pairs["date"]).dt.strftime("%Y-%m-%d")
             return pairs.drop_duplicates().reset_index(drop=True)
 
+    # 2) labels.parquet — fallback
+    labels_path = Path(data_cfg.get("labels", ""))
+    if labels_path.exists():
+        labels_df = pd.read_parquet(labels_path)
+        if {"ticker", "date"}.issubset(labels_df.columns):
+            pairs = labels_df[["ticker", "date"]].copy()
+            pairs["ticker"] = pairs["ticker"].astype(str).str.upper()
+            pairs["date"] = pd.to_datetime(pairs["date"]).dt.strftime("%Y-%m-%d")
+            return pairs.drop_duplicates().reset_index(drop=True)
+
+    # 3) article date span x configured tickers — last resort
     tickers = config.get("tickers", [])
     if not tickers:
         tickers = sorted(article_df["ticker"].astype(str).str.upper().unique().tolist())
@@ -220,9 +224,8 @@ def main(config_path: str = "configs/news_config.yaml"):
     df.to_parquet(output_path)
     print(f"Saved {len(df)} (ticker, date) samples to {output_path}")
     print(f"Shape: {df.shape}")
-    print(f"Tickers: {df.index.get_level_values('ticker').unique().tolist()}")
-    print(f"Date range: {df.index.get_level_values('date').min()} ~ "
-          f"{df.index.get_level_values('date').max()}")
+    print(f"Tickers: {df['ticker'].unique().tolist()}")
+    print(f"Date range: {df['date'].min()} ~ {df['date'].max()}")
 
 
 if __name__ == "__main__":
