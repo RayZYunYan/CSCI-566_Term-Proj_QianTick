@@ -37,13 +37,15 @@ class TestFinBERTEncoder:
         out = encoder.encode(SAMPLE_HEADLINES)
         assert out.shape == (len(SAMPLE_HEADLINES), 771)
 
-    def test_sentiment_is_probability(self, encoder):
-        """后 3 维应为概率（每行和为 1，值在 [0,1] 之间）"""
+    def test_sentiment_is_logits(self, encoder):
+        """后 3 维应为 raw logits（任意实数，不限 [0,1]，行和不为 1）"""
         out = encoder.encode(SAMPLE_HEADLINES)
         sentiment = out[:, 768:]
         assert sentiment.shape == (len(SAMPLE_HEADLINES), 3)
-        assert (sentiment >= 0).all() and (sentiment <= 1).all()
-        assert torch.allclose(sentiment.sum(dim=-1), torch.ones(len(SAMPLE_HEADLINES)), atol=1e-5)
+        # logits 是任意实数，softmax 后才是概率——行和不应等于 1
+        assert not torch.allclose(
+            sentiment.sum(dim=-1), torch.ones(len(SAMPLE_HEADLINES)), atol=1e-3
+        ), "Sentiment dims look like probabilities (sum≈1); expected raw logits"
 
     def test_bert_weights_frozen(self, encoder):
         """所有 BERT 参数应为 frozen（requires_grad=False）"""

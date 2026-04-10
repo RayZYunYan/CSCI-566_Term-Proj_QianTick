@@ -184,3 +184,31 @@ class FinBERTEncoder(nn.Module):
             flush_buffer(buffer_rows)
 
         print(f"Encoding finished. Saved {total} new articles to {output_parquet}")
+
+
+def main():
+    import argparse
+    import yaml
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default="configs/news_config.yaml")
+    args = parser.parse_args()
+
+    with open(args.config) as f:
+        config = yaml.safe_load(f)
+
+    data_cfg = config["data"]
+    train_cfg = config["training"]
+    model_cfg = config["model"]
+
+    encoder = FinBERTEncoder(model_name=model_cfg["finbert_model"])
+    encoder.encode_and_save(
+        cleaned_parquet=data_cfg["cleaned"],
+        output_parquet=data_cfg["article_embeddings"],
+        batch_size=train_cfg["batch_size"],
+        checkpoint_every=train_cfg["encoder_checkpoint_every"],
+    )
+
+
+if __name__ == "__main__":
+    main()

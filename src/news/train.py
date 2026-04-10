@@ -102,7 +102,7 @@ def train(config: dict):
         hidden_dim=model_cfg['hidden_dim'],
     ).to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg['lr'])
+    optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg['lr'], weight_decay=train_cfg['weight_decay'])
     criterion = nn.BCEWithLogitsLoss()
 
     best_val_loss = float('inf')

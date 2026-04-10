@@ -8,6 +8,7 @@ data:
   cleaned: data/processed/news/news_cleaned.parquet
   article_embeddings: data/features/news_article_embeddings.parquet
   news_features: data/features/news_features.parquet
+  price_features: data/features/price_features.parquet
   labels: data/features/labels.parquet
 
 preprocess:
