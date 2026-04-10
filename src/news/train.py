@@ -68,43 +68,48 @@ def evaluate(model: nn.Module, loader: DataLoader, device: torch.device):
     }
 
 def train(config: dict):
+    data_cfg     = config['data']
+    model_cfg    = config['model']
+    train_cfg    = config['training']
+    out_cfg      = config['output']
+
     set_seed()
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    os.makedirs('outputs/news_baseline', exist_ok=True)
+    os.makedirs(out_cfg['baseline_dir'], exist_ok=True)
 
     train_ds = NewsFeatureDataset(
-        features_path=config['features_path'],
-        labels_path=config['labels_path'],
+        features_path=data_cfg['news_features'],
+        labels_path=data_cfg['labels'],
         split='train',
     )
     val_ds = NewsFeatureDataset(
-        features_path=config['features_path'],
-        labels_path=config['labels_path'],
+        features_path=data_cfg['news_features'],
+        labels_path=data_cfg['labels'],
         split='val',
     )
     test_ds = NewsFeatureDataset(
-        features_path=config['features_path'],
-        labels_path=config['labels_path'],
+        features_path=data_cfg['news_features'],
+        labels_path=data_cfg['labels'],
         split='test',
     )
 
-    train_loader = DataLoader(train_ds, batch_size=config['batch_size'], shuffle=True)
+    train_loader = DataLoader(train_ds, batch_size=train_cfg['batch_size'], shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=256, shuffle=False)
     test_loader = DataLoader(test_ds, batch_size=256, shuffle=False)
 
     model = NewsUnimodalBaseline(
-        input_dim=771,
-        hidden_dim=config.get('hidden_dim', 256),
+        input_dim=model_cfg['feature_dim'],
+        hidden_dim=model_cfg['hidden_dim'],
     ).to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=config['lr'])
+    optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg['lr'])
     criterion = nn.BCEWithLogitsLoss()
 
     best_val_loss = float('inf')
     patience_counter = 0
     logs = []
 
-    for epoch in range(config['epochs']):
+    for epoch in range(train_cfg['epochs']):
         model.train()
         train_loss = 0.0
 
@@ -139,18 +144,18 @@ def train(config: dict):
         if val_metrics['loss'] < best_val_loss:
             best_val_loss = val_metrics['loss']
             patience_counter = 0
-            torch.save(model.state_dict(), 'outputs/news_baseline/best_model.pt')
+            torch.save(model.state_dict(), out_cfg['checkpoint'])
         else:
             patience_counter += 1
 
-        if patience_counter >= config['patience']:
+        if patience_counter >= train_cfg['early_stopping_patience']:
             print('Early stopping triggered.')
             break
 
-    model.load_state_dict(torch.load('outputs/news_baseline/best_model.pt', map_location=device))
+    model.load_state_dict(torch.load(out_cfg['checkpoint'], map_location=device))
     test_metrics = evaluate(model, test_loader, device)
 
-    with open('outputs/news_baseline/metrics.json', 'w', encoding='utf-8') as f:
+    with open(out_cfg['metrics'], 'w', encoding='utf-8') as f:
         json.dump(
             {k: v for k, v in test_metrics.items() if k not in ('probs', 'preds', 'labels')},
             f,
@@ -158,7 +163,7 @@ def train(config: dict):
             ensure_ascii=False,
         )
 
-    pd.DataFrame(logs).to_csv('outputs/news_baseline/training_log.csv', index=False)
+    pd.DataFrame(logs).to_csv(out_cfg['training_log'], index=False)
 
     pred_df = pd.DataFrame({
         'ticker': test_ds.df['ticker'].values,
@@ -169,9 +174,9 @@ def train(config: dict):
     })
 
     try:
-        pred_df.to_parquet('outputs/news_baseline/predictions.parquet', index=False)
+        pred_df.to_parquet(out_cfg['predictions'], index=False)
     except Exception:
-        pred_df.to_csv('outputs/news_baseline/predictions.csv', index=False)
+        pred_df.to_csv(out_cfg['predictions'].replace('.parquet', '.csv'), index=False)
 
 
 def main():
