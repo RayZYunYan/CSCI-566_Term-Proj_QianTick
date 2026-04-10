@@ -97,7 +97,7 @@ class NewsFeatureDataset(Dataset):
         samples = []
         for _, row in merged.iterrows():
             feat = torch.tensor(row[FEAT_COLS].values.astype("float32"))  # (771,)
-            label = torch.tensor(int(row["label"]), dtype=torch.long)     # scalar
+            label = torch.tensor([int(row["label"])], dtype=torch.float32)  # (1,)
             samples.append((feat, label))
         return samples
 
@@ -108,7 +108,7 @@ class NewsFeatureDataset(Dataset):
         """
         Returns:
             feat:  (771,)  float32 特征向量
-            label: scalar  long 标签（0 或 1）
+            label: (1,)    float32 标签（0.0 或 1.0）
         """
         return self.samples[idx]
 
