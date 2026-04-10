@@ -44,6 +44,11 @@ src/price_prediction_pipeline/data/processed/stock/dataset
 .ipynb_checkpoints/
 *.ipynb_checkpoints
 
+# pytest
+.pytest_cache/
+.pytest_tmp/
+pytest-cache-files-*/
+
 # IDE / Editors
 .vscode/
 .idea/
@@ -66,4 +71,9 @@ logs/
 # Claude Code
 .claude/
 
-.tmp_pdf_pages/
+# PDF working pages
+tmp_pdf_pages/
+
+# HuggingFace model cache
+.hf_cache/
+~/.cache/huggingface/
