@@ -66,9 +66,8 @@ class FinBERTEncoder(nn.Module):
             # CLS embedding (batch, 768)
             cls_emb = outputs.hidden_states[-1][:, 0, :]
 
-            # logits -> probability (batch, 3)
-            logits = outputs.logits
-            sentiment = torch.softmax(logits, dim=-1)
+            # raw sentiment logits (batch, 3) — negative, neutral, positive
+            sentiment = outputs.logits
 
             # concat -> (batch, 771)
             features = torch.cat([cls_emb, sentiment], dim=-1)
