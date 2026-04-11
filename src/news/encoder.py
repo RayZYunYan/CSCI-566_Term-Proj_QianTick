@@ -111,21 +111,17 @@ class FinBERTEncoder(nn.Module):
         df["article_id"] = df["article_id"].astype(str)
         df["headline"] = df["headline"].fillna("").astype(str)
 
-        df = df.drop_duplicates(subset=["article_id", "date"]).reset_index(drop=True)
+        # Deduplicate by article_id only — same article maps to 7 dates but the
+        # headline text is identical, so we only need to encode it once.
+        df = df.drop_duplicates(subset=["article_id"]).reset_index(drop=True)
 
-        existing_pairs = set()
+        existing_ids: set[str] = set()
         if output_parquet.exists():
-            old_df = pd.read_parquet(output_parquet, columns=["article_id", "date"])
-            existing_pairs = set(
-                zip(old_df["article_id"].astype(str), old_df["date"].astype(str))
-            )
+            old_df = pd.read_parquet(output_parquet, columns=["article_id"])
+            existing_ids = set(old_df["article_id"].astype(str))
 
-        if existing_pairs:
-            mask = [
-                (str(a), str(d)) not in existing_pairs
-                for a, d in zip(df["article_id"], df["date"])
-            ]
-            df = df[mask].reset_index(drop=True)
+        if existing_ids:
+            df = df[~df["article_id"].astype(str).isin(existing_ids)].reset_index(drop=True)
 
         if df.empty:
             print("No new articles to encode. Output is already up to date.")
@@ -141,13 +137,13 @@ class FinBERTEncoder(nn.Module):
                 return
 
             chunk_df = pd.DataFrame(rows)
-            ordered_cols = ["ticker", "date", "article_id"] + feature_cols
+            ordered_cols = ["article_id", "ticker"] + feature_cols
             chunk_df = chunk_df[ordered_cols]
 
             if output_parquet.exists():
                 existing_df = pd.read_parquet(output_parquet)
                 merged_df = pd.concat([existing_df, chunk_df], ignore_index=True)
-                merged_df = merged_df.drop_duplicates(subset=["article_id", "date"], keep="last")
+                merged_df = merged_df.drop_duplicates(subset=["article_id"], keep="last")
                 merged_df.to_parquet(output_parquet, index=False)
             else:
                 chunk_df.to_parquet(output_parquet, index=False)
@@ -160,13 +156,12 @@ class FinBERTEncoder(nn.Module):
             features = self.encode(texts)  # (B, 771)
             features_np = features.detach().cpu().numpy().astype(np.float32)
 
-            meta = batch_df[["ticker", "date", "article_id"]].reset_index(drop=True)
+            meta = batch_df[["article_id", "ticker"]].reset_index(drop=True)
 
             for i in range(len(batch_df)):
                 row_dict = {
-                    "ticker": meta.loc[i, "ticker"],
-                    "date": meta.loc[i, "date"],
                     "article_id": meta.loc[i, "article_id"],
+                    "ticker": meta.loc[i, "ticker"],
                 }
                 for j in range(771):
                     row_dict[f"feat_{j}"] = float(features_np[i, j])
@@ -183,7 +178,7 @@ class FinBERTEncoder(nn.Module):
         if buffer_rows:
             flush_buffer(buffer_rows)
 
-        print(f"Encoding finished. Saved {total} new articles to {output_parquet}")
+        print(f"Encoding finished. Saved {total} unique articles to {output_parquet}")
 
 
 def main():
