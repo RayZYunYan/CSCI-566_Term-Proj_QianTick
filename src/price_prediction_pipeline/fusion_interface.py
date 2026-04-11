@@ -69,26 +69,32 @@ def export_price_features(
     if (not model_configs):
         raise FileNotFoundError(f"No trained model checkpoints found in {model_dir}")
 
-    # Extract feature vectors and prediction probabilities from each available model.
+    # Extract feature vectors and predicted returns from each available model.
     for name, cfg in model_configs.items():
-        # Extract feature vectors of shape (N, hidden_dim) for fusion layer input.
-        # Batch size is not important here, since we are not training the model.
         features = cfg["extract_fn"](cfg["model_path"], data_dir, split, device, batch_size)
         feat_path = features_dir / f"{name}_features.pt"
         torch.save(torch.from_numpy(features), feat_path)
 
-        # Extract prediction probabilities P(up) for each sample.
-        y_prob, _, _ = cfg["predict_fn"](cfg["model_path"], data_dir, split, device, batch_size)
-        meta_df[f"p_up_{name}"] = y_prob
+        y_pred, _ = cfg["predict_fn"](cfg["model_path"], data_dir, split, device, batch_size)
+        meta_df[f"pred_return_{name}"] = y_pred
 
-    # Attach true labels to the metadata DataFrame.
+    # Attach true return labels to the metadata DataFrame.
     meta_df["true_label"] = y_true
 
     # Reorder columns: metadata first, then true_label, then prediction columns.
     base_cols = ["ticker", "as_of_date", "target_date", "true_label"]
-    pred_cols = [c for c in meta_df.columns if (c.startswith("p_up_"))]
+    pred_cols = [c for c in meta_df.columns if (c.startswith("pred_return_"))]
     meta_df = meta_df[base_cols + pred_cols]
 
     # Save the combined metadata and predictions CSV for the fusion layer.
     csv_path = predictions_dir / "price_model_outputs.csv"
     meta_df.to_csv(csv_path, index=False)
+
+    # Export labels.parquet for the news pipeline (ticker, date, label = next-day return).
+    labels_df = meta_df[["ticker", "target_date", "true_label"]].copy()
+    labels_df = labels_df.rename(columns={"target_date": "date", "true_label": "label"})
+    labels_df["date"] = labels_df["date"].astype(str).str[:10]
+    labels_path = Path(output_dir).parent.parent.parent.parent / "data" / "features" / "labels.parquet"
+    labels_path.parent.mkdir(parents=True, exist_ok=True)
+    labels_df.to_parquet(labels_path, index=False)
+    print(f"Exported labels.parquet to {labels_path}")

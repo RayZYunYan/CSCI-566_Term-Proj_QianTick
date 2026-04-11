@@ -4,6 +4,24 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score, confusion_matrix
 
+
+def compute_regression_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
+    y_true, y_pred = np.asarray(y_true, dtype=np.float32), np.asarray(y_pred, dtype=np.float32)
+    mae  = float(np.mean(np.abs(y_true - y_pred)))
+    rmse = float(np.sqrt(np.mean((y_true - y_pred) ** 2)))
+    ss_res = float(np.sum((y_true - y_pred) ** 2))
+    ss_tot = float(np.sum((y_true - np.mean(y_true)) ** 2))
+    r2   = float(1 - ss_res / ss_tot) if ss_tot > 0 else 0.0
+    # Direction accuracy: did we predict the right sign (up vs down)?
+    dir_acc = float(np.mean(np.sign(y_true) == np.sign(y_pred)))
+    return {
+        "mae": mae,
+        "rmse": rmse,
+        "r2": r2,
+        "direction_accuracy": dir_acc,
+        "support": {"total": int(len(y_true))},
+    }
+
 PIPELINE_ROOT = Path(__file__).resolve().parent
 
 def compute_classification_metrics(y_true, y_pred, y_prob):
@@ -55,12 +73,11 @@ def compare_model_metrics(
             continue
         m = load_metrics(path)
         rows.append({
-            "model": name, 
-            "roc_auc": m.get("roc_auc"), 
-            "accuracy": m.get("accuracy"), 
-            "f1_score": m.get("f1_score"), 
-            "precision": m.get("precision"), 
-            "recall": m.get("recall")
+            "model": name,
+            "mae": m.get("mae"),
+            "rmse": m.get("rmse"),
+            "r2": m.get("r2"),
+            "direction_accuracy": m.get("direction_accuracy"),
         })
     if (not rows):
         raise ValueError("No metrics found for the specified models.")

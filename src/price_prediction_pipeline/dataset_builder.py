@@ -16,7 +16,7 @@ def build_windows_for_ticker(ticker_df: pd.DataFrame, lookback: int, feature_col
     ticker = ticker_df["Ticker"].iloc[0]
     # Extract dates for metadata.
     dates = ticker_df["Date"].values
-    # Extract close prices for next-day up/down label construction.
+    # Extract close prices for next-day return label construction.
     close = ticker_df["Close"].values
     # Extract all features as a 2D NumPy array of shape (T, num_features).
     feature_data = ticker_df[feature_cols].values
@@ -28,8 +28,8 @@ def build_windows_for_ticker(ticker_df: pd.DataFrame, lookback: int, feature_col
         window_start = t - lookback + 1
         # Use the past (lookback) days of all features up to and including day t.
         X_list.append(feature_data[window_start : t + 1])
-        # Create a binary label: 1 if next day's close is higher than today's, else 0.
-        label = 1 if (close[t + 1] > close[t]) else 0
+        # Continuous label: next-day return (e.g. +0.023 = +2.3%).
+        label = float((close[t + 1] - close[t]) / close[t])
         y_list.append(label)
         # Store metadata for tracing the sample's input date and prediction target date.
         meta_list.append({
@@ -53,7 +53,7 @@ def combine_all_tickers(feature_df: pd.DataFrame, lookback: int, feature_cols: l
         all_meta.extend(ml)
     
     X = np.array(all_X, dtype=np.float32)
-    y = np.array(all_y, dtype=np.int64)
+    y = np.array(all_y, dtype=np.float32)
     meta_df = pd.DataFrame(all_meta)
     meta_df["as_of_date"] = pd.to_datetime(meta_df["as_of_date"])
     meta_df["target_date"] = pd.to_datetime(meta_df["target_date"])
