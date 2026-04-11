@@ -76,7 +76,6 @@ class QianTickModel(nn.Module):
             nn.ReLU(),
             nn.Dropout(0.3),
             nn.Linear(64, 1),
-            nn.Sigmoid(),
         )
 
     def forward(self, news_feat: torch.Tensor, price_feat: torch.Tensor) -> torch.Tensor:

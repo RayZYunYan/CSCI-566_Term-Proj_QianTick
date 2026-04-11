@@ -17,7 +17,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import yaml
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from torch.utils.data import DataLoader
 
 from src.news.dataset import NewsFeatureDataset
@@ -34,9 +34,9 @@ def set_seed(seed: int = RANDOM_SEED):
 
 def evaluate(model: nn.Module, loader: DataLoader, device: torch.device):
     model.eval()
-    criterion = nn.BCEWithLogitsLoss()
+    criterion = nn.MSELoss()
 
-    all_probs = []
+    all_preds = []
     all_labels = []
     total_loss = 0.0
 
@@ -45,25 +45,19 @@ def evaluate(model: nn.Module, loader: DataLoader, device: torch.device):
             x = x.to(device)
             y = y.to(device).float()
 
-            logits = model(x)
-            loss = criterion(logits, y)
+            preds = model(x)
+            loss = criterion(preds, y)
             total_loss += loss.item()
 
-            probs = torch.sigmoid(logits)
-            all_probs.extend(probs.cpu().numpy().flatten())
+            all_preds.extend(preds.cpu().numpy().flatten())
             all_labels.extend(y.cpu().numpy().flatten())
-
-    preds = [1 if p >= 0.5 else 0 for p in all_probs]
 
     return {
         'loss': total_loss / max(1, len(loader)),
-        'accuracy': accuracy_score(all_labels, preds),
-        'precision': precision_score(all_labels, preds, zero_division=0),
-        'recall': recall_score(all_labels, preds, zero_division=0),
-        'f1': f1_score(all_labels, preds, zero_division=0),
-        'roc_auc': roc_auc_score(all_labels, all_probs) if len(set(all_labels)) > 1 else float('nan'),
-        'probs': all_probs,
-        'preds': preds,
+        'mae': mean_absolute_error(all_labels, all_preds),
+        'rmse': mean_squared_error(all_labels, all_preds) ** 0.5,
+        'r2': r2_score(all_labels, all_preds),
+        'preds': all_preds,
         'labels': all_labels,
     }
 
@@ -103,7 +97,7 @@ def train(config: dict):
     ).to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg['lr'], weight_decay=train_cfg['weight_decay'])
-    criterion = nn.BCEWithLogitsLoss()
+    criterion = nn.MSELoss()
 
     best_val_loss = float('inf')
     patience_counter = 0
@@ -131,14 +125,14 @@ def train(config: dict):
             'epoch': epoch + 1,
             'train_loss': train_loss / max(1, len(train_loader)),
             'val_loss': val_metrics['loss'],
-            'val_acc': val_metrics['accuracy'],
+            'val_mae': val_metrics['mae'],
         })
 
         print(
             f"Epoch {epoch + 1} | "
             f"train_loss={logs[-1]['train_loss']:.4f} | "
             f"val_loss={val_metrics['loss']:.4f} | "
-            f"val_f1={val_metrics['f1']:.4f}"
+            f"val_mae={val_metrics['mae']:.4f}"
         )
 
         if val_metrics['loss'] < best_val_loss:
@@ -157,7 +151,7 @@ def train(config: dict):
 
     with open(out_cfg['metrics'], 'w', encoding='utf-8') as f:
         json.dump(
-            {k: v for k, v in test_metrics.items() if k not in ('probs', 'preds', 'labels')},
+            {k: v for k, v in test_metrics.items() if k not in ('preds', 'labels')},
             f,
             indent=2,
             ensure_ascii=False,
@@ -168,9 +162,8 @@ def train(config: dict):
     pred_df = pd.DataFrame({
         'ticker': test_ds.df['ticker'].values,
         'date': test_ds.df['date'].astype(str).values,
-        'prob': test_metrics['probs'],
-        'pred_label': test_metrics['preds'],
-        'true_label': test_metrics['labels'],
+        'pred_return': test_metrics['preds'],
+        'true_return': test_metrics['labels'],
     })
 
     try:
