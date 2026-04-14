@@ -1,0 +1,11 @@
+{
+    "best_val_mse": 0.0004989730077795684,
+    "num_channels": 128,
+    "num_layers": 2,
+    "kernel_size": 5,
+    "dropout": 0.38833691403757864,
+    "lr": 0.007010829878535075,
+    "batch_size": 256,
+    "weight_decay": 6.335962559245944e-05,
+    "activation": "relu"
+}

@@ -4,7 +4,8 @@ import pandas as pd
 from feature_engineering import get_feature_preset_columns
 
 PIPELINE_ROOT = Path(__file__).resolve().parent
-DATA_ROOT = PIPELINE_ROOT / "data"
+REPO_ROOT = PIPELINE_ROOT.parent.parent
+DATA_ROOT = REPO_ROOT / "data"
 
 def build_windows_for_ticker(ticker_df: pd.DataFrame, lookback: int, feature_cols: list[str]):
     # Sort rows by date in ascending order and reset the row index.

@@ -11,6 +11,7 @@ from dataset_builder import load_dataset
 from metrics import compute_regression_metrics, save_metrics
 
 PIPELINE_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = PIPELINE_ROOT.parent.parent
 ACTIVATION_REGISTRY = {"relu": nn.ReLU, "gelu": nn.GELU, "silu": nn.SiLU}
 
 class CausalConv1d(nn.Module):
@@ -305,7 +306,7 @@ def train_tcn(
         raise ValueError("data_dir must be provided explicitly. Use main_pipeline.py to select the dataset from feature_preset and lookback.")
     
     if (output_dir is None):
-        output_dir = PIPELINE_ROOT / "outputs"
+        output_dir = REPO_ROOT / "outputs" / "price"
     
     # Set up directories, device, and random seeds for reproducibility.
     data_dir, output_dir = Path(data_dir), Path(output_dir)

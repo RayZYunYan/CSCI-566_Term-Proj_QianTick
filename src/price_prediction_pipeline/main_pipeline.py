@@ -1,14 +1,8 @@
 from pathlib import Path
-from fetch_data import fetch_all_stocks
-from feature_engineering import engineer_features_all
-from dataset_builder import build_dataset
-from lstm_model import train_lstm
-from gru_model import train_gru
-from tcn_model import train_tcn
-from fusion_interface import export_price_features
 
 PIPELINE_ROOT = Path(__file__).resolve().parent
-DATA_ROOT = PIPELINE_ROOT / "data"
+REPO_ROOT = PIPELINE_ROOT.parent.parent
+DATA_ROOT = REPO_ROOT / "data"
 
 def get_dataset_dir(feature_preset: str, lookback: int):
     return DATA_ROOT / "processed" / "stock" / "dataset" / f"{feature_preset}_lb{lookback}"
@@ -21,14 +15,17 @@ def data_preprocessing(
     lookback: int = 30
 ):
     if (if_fetch_data):
+        from fetch_data import fetch_all_stocks
         print("[FETCH DATA]\n")
         fetch_all_stocks()
 
     if (if_feature_engineering):
+        from feature_engineering import engineer_features_all
         print("[FEATURE ENGINEERING]\n")
         engineer_features_all()
 
     if (if_build_dataset):
+        from dataset_builder import build_dataset
         print("[BUILD DATASET]\n")
         data_dir = get_dataset_dir(feature_preset, lookback)
         build_dataset(feature_preset=feature_preset, lookback=lookback, output_dir=data_dir)
@@ -52,6 +49,7 @@ def price_prediction_task(
         data_dir = get_dataset_dir(feature_preset, lookback)
 
     if (if_train_lstm):
+        from lstm_model import train_lstm
         print("[TRAIN LSTM]\n")
         train_lstm(
             data_dir=data_dir, 
@@ -62,6 +60,7 @@ def price_prediction_task(
         )
 
     if (if_train_gru):
+        from gru_model import train_gru
         print("[TRAIN GRU]\n")
         train_gru(
             data_dir=data_dir, 
@@ -72,6 +71,7 @@ def price_prediction_task(
         )
 
     if (if_train_tcn):
+        from tcn_model import train_tcn
         print("[TRAIN TCN]\n")
         train_tcn(
             data_dir=data_dir,
@@ -91,6 +91,7 @@ def export_features_for_fusion(
     data_dir: str | None = None
 ):
     if (if_export):
+        from fusion_interface import export_price_features
         print("[EXPORT FEATURES FOR FUSION]\n")
         if (data_dir is None):
             data_dir = get_dataset_dir(feature_preset, lookback)
@@ -103,21 +104,21 @@ if __name__ == "__main__":
 
     # For feature_preset, options include: "full", "relative_only".
     data_preprocessing(
-        if_fetch_data=False, 
-        if_feature_engineering=False, 
-        if_build_dataset=False, 
-        feature_preset=feature_preset, 
+        if_fetch_data=False,
+        if_feature_engineering=False,
+        if_build_dataset=True,
+        feature_preset=feature_preset,
         lookback=lookback
     )
     price_prediction_task(
-        if_train_lstm=False, 
-        if_train_gru=False, 
-        if_train_tcn=False, 
-        feature_preset=feature_preset, 
-        lookback=lookback, 
-        n_trials=50, 
-        max_epochs_per_trial=60, 
-        max_epochs_final=300, 
+        if_train_lstm=True,
+        if_train_gru=True,
+        if_train_tcn=True,
+        feature_preset=feature_preset,
+        lookback=lookback,
+        n_trials=50,
+        max_epochs_per_trial=60,
+        max_epochs_final=300,
         patience=20
     )
-    export_features_for_fusion(if_export=False, feature_preset=feature_preset, lookback=lookback)
+    export_features_for_fusion(if_export=True, feature_preset=feature_preset, lookback=lookback)

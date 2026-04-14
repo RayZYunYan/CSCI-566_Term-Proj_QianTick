@@ -1,83 +1,103 @@
 """
 Fusion Dataset
 --------------
-合并新闻特征和价格特征，按 (ticker, date) 对齐，供融合模型训练使用。
+从 export_to_fusion/ 的 PT 文件和 news_features.parquet 加载数据，
+按 (ticker, as_of_date) 对齐，供融合模型训练使用。
 
 输入：
-    data/features/news_features.parquet   - (ticker, date) 索引，771维
-    data/features/price_features.parquet  - (ticker, date) 索引，192维
+    export_to_fusion/features/{lstm,gru,tcn}_features.pt  - 价格侧特征
+    export_to_fusion/predictions/price_model_outputs.csv  - 对齐主表（含 split 列）
+    data/features/news_features.parquet                   - 新闻侧特征 (771维)
 
-输出：每个样本包含 news_feat + price_feat + label
+输出：每个样本包含 news_feat (771) + price_feat (320) + label_cls (0/1) + label_reg (float)
 """
 
 import torch
 from torch.utils.data import Dataset
 import pandas as pd
+import numpy as np
 from pathlib import Path
 
 
-NEWS_FEAT_PATH  = Path("data/features/news_features.parquet")
-PRICE_FEAT_PATH = Path("data/features/price_features.parquet")
-
-TRAIN_END   = "2024-06-30"
-VAL_START   = "2024-07-01"
-VAL_END     = "2024-12-31"
-TEST_START  = "2025-01-01"
-
-RANDOM_SEED = 42
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 class FusionDataset(Dataset):
-    """
-    按 (ticker, date) inner join 新闻特征和价格特征。
-    只保留两边都有数据的样本（避免缺失）。
-
-    TODO:
-        - 确认 label 来源（建议统一从价格数据计算，避免不一致）
-        - 检查 (ticker, date) 对齐后是否有大量缺失，决定是否需要插值
-    """
-
-    def __init__(self, split: str = "train"):
+    def __init__(
+        self,
+        split: str = "train",
+        news_features_path: str | Path | None = None,
+        price_features_dir: str | Path | None = None,
+        price_csv_path: str | Path | None = None,
+    ):
         assert split in ("train", "val", "test")
         self.split = split
-        self.data = self._load_and_merge()
 
-    def _load_and_merge(self) -> pd.DataFrame:
-        news_df  = pd.read_parquet(NEWS_FEAT_PATH)
-        price_df = pd.read_parquet(PRICE_FEAT_PATH)
+        if news_features_path is None:
+            news_features_path = REPO_ROOT / "data" / "features" / "news_features.parquet"
+        if price_features_dir is None:
+            price_features_dir = REPO_ROOT / "export_to_fusion" / "features"
+        if price_csv_path is None:
+            price_csv_path = REPO_ROOT / "export_to_fusion" / "predictions" / "price_model_outputs.csv"
 
-        # inner join on (ticker, date)
-        merged = news_df.join(price_df, how="inner")
+        price_features_dir = Path(price_features_dir)
 
-        # 按时间切分
-        dates = merged.index.get_level_values("date")
-        if self.split == "train":
-            merged = merged[dates <= TRAIN_END]
-        elif self.split == "val":
-            merged = merged[(dates >= VAL_START) & (dates <= VAL_END)]
-        else:
-            merged = merged[dates >= TEST_START]
+        # Load price feature tensors and concatenate: (N_total, 64+128+128) = (N_total, 320)
+        lstm = torch.load(price_features_dir / "lstm_features.pt", weights_only=True).float()
+        gru  = torch.load(price_features_dir / "gru_features.pt",  weights_only=True).float()
+        tcn  = torch.load(price_features_dir / "tcn_features.pt",  weights_only=True).float()
+        price_feat_all = torch.cat([lstm, gru, tcn], dim=1)  # (N_total, 320)
 
-        print(f"[FusionDataset/{self.split}] {len(merged)} samples")
-        return merged
+        # Load metadata CSV — row order matches PT files exactly.
+        csv = pd.read_csv(price_csv_path)
+        csv["_row_idx"] = np.arange(len(csv))
 
-    def __len__(self):
-        return len(self.data)
+        # Load news features: (ticker, date, feat_0 ~ feat_770)
+        news_df = pd.read_parquet(news_features_path)
+        news_df["date"] = news_df["date"].astype(str).str[:10]
+        news_min_date = news_df["date"].min()
 
-    def __getitem__(self, idx):
-        row = self.data.iloc[idx]
-        ticker = self.data.index[idx][0]
-        date   = self.data.index[idx][1]
+        # Filter to requested split, then drop price rows before news coverage starts.
+        csv_split = csv[csv["split"] == split].copy()
+        csv_split = csv_split[csv_split["as_of_date"] >= news_min_date]
 
-        # TODO: 区分 news_feat 列和 price_feat 列
-        news_feat  = torch.tensor(row.filter(like="news_feat").values,  dtype=torch.float32)
-        price_feat = torch.tensor(row.filter(like="price_feat").values, dtype=torch.float32)
-        label      = torch.tensor(row["label"], dtype=torch.long)
+        # Join on (ticker, as_of_date == news.date).
+        merged = csv_split.merge(
+            news_df,
+            left_on=["ticker", "as_of_date"],
+            right_on=["ticker", "date"],
+            how="inner",
+        )
 
+        if len(merged) == 0:
+            raise ValueError(
+                f"FusionDataset/{split}: no samples after joining price and news features. "
+                "Check that as_of_date in price CSV matches date in news_features.parquet."
+            )
+
+        # Extract aligned price features using row indices from the full PT tensor.
+        row_indices = torch.tensor(merged["_row_idx"].values, dtype=torch.long)
+        self.price_feat = price_feat_all[row_indices]  # (N, 320)
+
+        # Extract news features.
+        feat_cols = [c for c in news_df.columns if c.startswith("feat_")]
+        self.news_feat = torch.tensor(merged[feat_cols].values, dtype=torch.float32)  # (N, 771)
+
+        # Labels: regression (continuous return) and classification (>0 → 1).
+        returns = merged["true_label"].values.astype(np.float32)
+        self.label_reg = torch.tensor(returns, dtype=torch.float32)
+        self.label_cls = torch.tensor((returns > 0).astype(np.float32), dtype=torch.float32)
+
+        print(f"[FusionDataset/{split}] {len(merged)} samples "
+              f"(price rows: {len(csv_split)}, after news join: {len(merged)})")
+
+    def __len__(self) -> int:
+        return len(self.label_reg)
+
+    def __getitem__(self, idx: int):
         return {
-            "ticker": ticker,
-            "date": date,
-            "news_feat": news_feat,    # (771,)
-            "price_feat": price_feat,  # (192,)
-            "label": label,
+            "news_feat":  self.news_feat[idx],
+            "price_feat": self.price_feat[idx],
+            "label_cls":  self.label_cls[idx],
+            "label_reg":  self.label_reg[idx],
         }
