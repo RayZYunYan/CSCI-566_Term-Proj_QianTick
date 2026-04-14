@@ -90,11 +90,17 @@ def export_price_features(
     csv_path = predictions_dir / "price_model_outputs.csv"
     meta_df.to_csv(csv_path, index=False)
 
-    # Export labels.parquet for the news pipeline (ticker, date, label = next-day return).
-    labels_df = meta_df[["ticker", "target_date", "true_label"]].copy()
-    labels_df = labels_df.rename(columns={"target_date": "date", "true_label": "label"})
-    labels_df["date"] = labels_df["date"].astype(str).str[:10]
+    # Export labels.parquet covering ALL splits for the news pipeline.
+    # Must include train/val/test so NewsFeatureDataset can filter each split correctly.
+    all_pieces = []
+    for s in ("train", "val", "test"):
+        m = splits[s]["meta"][["ticker", "target_date"]].copy()
+        m["label"] = splits[s]["y"]
+        all_pieces.append(m)
+    all_labels_df = pd.concat(all_pieces, ignore_index=True)
+    all_labels_df = all_labels_df.rename(columns={"target_date": "date"})
+    all_labels_df["date"] = all_labels_df["date"].astype(str).str[:10]
     labels_path = Path(output_dir).parent.parent.parent.parent / "data" / "features" / "labels.parquet"
     labels_path.parent.mkdir(parents=True, exist_ok=True)
-    labels_df.to_parquet(labels_path, index=False)
-    print(f"Exported labels.parquet to {labels_path}")
+    all_labels_df.to_parquet(labels_path, index=False)
+    print(f"Exported labels.parquet ({len(all_labels_df)} rows, all splits) to {labels_path}")
