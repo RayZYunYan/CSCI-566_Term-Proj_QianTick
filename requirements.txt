@@ -17,7 +17,7 @@ pandas==2.3.3
 numpy==2.0.2
 pyarrow==21.0.0
 requests==2.32.4
-python-dotenv==1.1.0
+python-dotenv==1.2.2
 
 # Training utils
 scikit-learn==1.6.1
