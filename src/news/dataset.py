@@ -97,7 +97,7 @@ class NewsFeatureDataset(Dataset):
         samples = []
         for _, row in merged.iterrows():
             feat = torch.tensor(row[FEAT_COLS].values.astype("float32"))  # (771,)
-            label = torch.tensor([int(row["label"])], dtype=torch.float32)  # (1,)
+            label = torch.tensor([float(row["label"])], dtype=torch.float32)  # (1,)
             samples.append((feat, label))
         meta = merged[["ticker", "date"]].reset_index(drop=True)
         return samples, meta

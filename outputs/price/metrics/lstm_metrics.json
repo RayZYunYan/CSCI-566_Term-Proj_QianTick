@@ -1,0 +1,19 @@
+{
+  "mae": 0.01749470829963684,
+  "rmse": 0.02674218639731407,
+  "r2": -0.04890138140080347,
+  "direction_accuracy": 0.5215859030837005,
+  "support": {
+    "total": 5675
+  },
+  "best_params": {
+    "hidden_dim": 64,
+    "num_layers": 3,
+    "dropout": 0.294431086818809,
+    "lr": 0.0003484438628603662,
+    "batch_size": 256,
+    "weight_decay": 3.320249500947684e-06,
+    "activation": "gelu"
+  },
+  "best_val_mse": 0.000499201996717602
+}

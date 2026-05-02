@@ -5,7 +5,8 @@ import pandas as pd
 import yfinance as yf
 
 PIPELINE_ROOT = Path(__file__).resolve().parent
-DATA_ROOT = PIPELINE_ROOT / "data"
+REPO_ROOT = PIPELINE_ROOT.parent.parent
+DATA_ROOT = REPO_ROOT / "data"
 PRIMARY_TICKERS = ["AAPL", "MSFT", "GOOGL", "NVDA", "TSLA", "META", "AMZN", "AMD", "INTC", "CRM", "NFLX", "AVGO", "ORCL", "ADBE"]
 MARKET_CONTEXT_TICKERS = ["SPY", "QQQ", "^VIX", "XLK", "SOXX", "TLT"]
 DEFAULT_START_DATE = "2018-01-01"

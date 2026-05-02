@@ -5,7 +5,8 @@ import numpy as np
 import pandas as pd
 
 PIPELINE_ROOT = Path(__file__).resolve().parent
-DATA_ROOT = PIPELINE_ROOT / "data"
+REPO_ROOT = PIPELINE_ROOT.parent.parent
+DATA_ROOT = REPO_ROOT / "data"
 REQUIRED_RAW_COLS = ["Date", "Ticker", "Open", "High", "Low", "Close", "Volume"]
 
 # Keep the original basic feature names for continuity with your current pipeline.

@@ -1,4 +1,6 @@
-# Python cache
+# ============================================================
+# Python
+# ============================================================
 __pycache__/
 *.py[cod]
 *.pyc
@@ -6,13 +8,17 @@ __pycache__/
 *.pyd
 .Python
 
+# ============================================================
 # Virtual Environments
+# ============================================================
 venv/
 env/
 .venv/
 ENV/
 
-# API keys and credentials
+# ============================================================
+# Secrets & Credentials
+# ============================================================
 .env
 *.env
 *_secrets.yaml
@@ -21,59 +27,88 @@ api_keys.json
 credentials.json
 *.key
 
-# Data
-!data/
-!data/raw/
-!data/processed/
-data/cache/
+# ============================================================
+# Large Data Files (too large for GitHub)
+# ============================================================
 
-# Ignore large binary or intermediate files.
-*.parquet
-*.pkl
-*.pickle
+# Raw news data from teammates (4~20MB each, total ~100MB+)
+data/raw/news/
 
-# Models / Outputs
-outputs/
+# Processed/merged news files (28~68MB each)
+data/processed/news/
+
+# Price feature engineering output (34MB)
+data/processed/stock/features/all_features.csv
+
+# Merged raw stock CSV (4.7MB, derived from individual CSVs)
+data/raw/stock/all_stocks.csv
+
+# Dataset splits - npz files (25~116MB each)
+data/processed/stock/dataset/
+
+# News article embeddings (2.67GB — too large)
+data/features/news_article_embeddings.parquet
+
+# news_features.parquet (50MB) and export_to_fusion/features/*.pt (10~20MB)
+# are under GitHub's 100MB limit — allowed by default
+
+# ============================================================
+# Small files — explicitly ALLOW (override rules above if needed)
+# ============================================================
+# data/raw/stock/AAPL.csv etc.  (~200KB each) — allowed by default
+# data/features/labels.parquet  (~small)       — allowed by default
+# export_to_fusion/predictions/price_model_outputs.csv (~3MB) — allowed
+# outputs/fusion/fusion_best.pt (~2.3MB)        — allowed
+# src/price_prediction_pipeline/outputs/        — allowed
+
+# ============================================================
+# Misc Large / Temporary
+# ============================================================
 checkpoints/
-*.pth
-*.h5
-*.ckpt
-src/price_prediction_pipeline/data/processed/stock/dataset
+data/cache/
+.hf_cache/
+tmp_pdf_pages/
+.codex_tmp/
+notebooks/
 
-# Jupyter
-.ipynb_checkpoints/
-*.ipynb_checkpoints
-
-# pytest
+# ============================================================
+# Pytest cache
+# ============================================================
 .pytest_cache/
 .pytest_tmp/
 pytest-cache-files-*/
 
-# IDE / Editors
+# ============================================================
+# IDE / Editor
+# ============================================================
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# Operating System files
+# ============================================================
+# OS
+# ============================================================
 .DS_Store
 Thumbs.db
 Desktop.ini
 
-# Logs
+# ============================================================
+# Logs & Temp
+# ============================================================
 *.log
 logs/
-
-# Temp files
 *.tmp
 *.temp
+
+# ============================================================
 # Claude Code
+# ============================================================
 .claude/
 
-# PDF working pages
-tmp_pdf_pages/
-
-# HuggingFace model cache
-.hf_cache/
-~/.cache/huggingface/
+# ============================================================
+# Jupyter
+# ============================================================
+.ipynb_checkpoints/
+*.ipynb_checkpoints

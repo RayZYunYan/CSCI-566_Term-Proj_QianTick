@@ -46,7 +46,7 @@ model:
 
 training:
   news_window: 7          # articles on day T feed predictions T ~ T+6
-  batch_size: 64
+  batch_size: 256
   lr: 1.0e-4
   weight_decay: 1.0e-5
   epochs: 30

@@ -1,22 +1,27 @@
-# Fusion Model Config (Cross-Attention)
+# Fusion Model Config (Cross-Attention + Dual-Task)
 
 data:
-  news_features: data/features/news_features.parquet
-  price_features: data/features/price_features.parquet
+  news_features:   data/features/news_features.parquet
+  price_features:  export_to_fusion/features          # directory containing lstm/gru/tcn_features.pt
+  price_csv:       export_to_fusion/predictions/price_model_outputs.csv
 
 model:
-  news_dim: 771           # FinBERT 768 + 3 sentiment
-  price_dim: 192          # LSTM 128 + tech MLP 64
-  fusion_dim: 256         # Cross-Attention 输出维度
-  nhead: 4                # Attention heads
-  dropout: 0.1
+  news_dim:    771   # FinBERT 768 + 3 sentiment
+  price_dim:   320   # LSTM 64 + GRU 128 + TCN 128
+  fusion_dim:  256
+  nhead:       4
+  dropout:     0.1
 
 training:
-  seed: 42
-  epochs: 50
-  batch_size: 128
-  lr: 5.0e-4
-  weight_decay: 1.0e-5
-  scheduler: cosine
+  seed:                    42
+  epochs:                  50
+  batch_size:              128
+  lr:                      5.0e-4
+  weight_decay:            1.0e-5
   early_stopping_patience: 7
-  checkpoint: checkpoints/fusion_best.pt
+  alpha:                   0.7    # weight for cls loss; (1-alpha) for reg loss
+
+output:
+  checkpoint:   outputs/fusion/fusion_best.pt
+  metrics:      outputs/fusion/metrics.json
+  predictions:  outputs/fusion/predictions.parquet

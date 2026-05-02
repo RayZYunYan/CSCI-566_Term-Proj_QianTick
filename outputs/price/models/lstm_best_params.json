@@ -1,0 +1,10 @@
+{
+  "best_val_mse": 0.000499201996717602,
+  "hidden_dim": 64,
+  "num_layers": 3,
+  "dropout": 0.294431086818809,
+  "lr": 0.0003484438628603662,
+  "batch_size": 256,
+  "weight_decay": 3.320249500947684e-06,
+  "activation": "gelu"
+}

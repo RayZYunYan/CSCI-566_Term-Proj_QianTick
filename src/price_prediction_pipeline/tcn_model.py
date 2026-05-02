@@ -6,12 +6,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 import optuna
 from torch.utils.data import TensorDataset, DataLoader
-from sklearn.metrics import roc_auc_score
 
 from dataset_builder import load_dataset
-from metrics import compute_classification_metrics, save_metrics
+from metrics import compute_regression_metrics, save_metrics
 
 PIPELINE_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = PIPELINE_ROOT.parent.parent
 ACTIVATION_REGISTRY = {"relu": nn.ReLU, "gelu": nn.GELU, "silu": nn.SiLU}
 
 class CausalConv1d(nn.Module):
@@ -203,72 +203,45 @@ def train_one_epoch(model, loader, optimizer, criterion, device):
 
 @torch.no_grad()
 def get_predictions(model, loader, device):
-    """
-    Gets predicted probabilities and true labels from the model for the entire dataset in the loader.
-    """
     model.eval()
-    all_probs = []
-    all_labels = []
-    
+    all_preds, all_labels = [], []
     for X_batch, y_batch in loader:
         X_batch = X_batch.to(device).float()
-        probs = torch.sigmoid(model(X_batch)).detach().cpu().numpy()
-        
-        all_probs.append(probs)
+        preds = model(X_batch).detach().cpu().numpy()
+        all_preds.append(preds)
         all_labels.append(y_batch.numpy())
-    
-    if len(all_probs) == 0:
+    if len(all_preds) == 0:
         return np.array([]), np.array([])
-    
-    return np.concatenate(all_probs, axis=0), np.concatenate(all_labels, axis=0)
+    return np.concatenate(all_preds, axis=0), np.concatenate(all_labels, axis=0)
 
 
-def val_roc_auc(model, loader, device):
-    """Computes ROC-AUC on the validation set."""
-    y_prob, y_true = get_predictions(model, loader, device)
-    try:
-        return float(roc_auc_score(y_true, y_prob))
-    except ValueError:
-        return 0.0
+def val_mean_mse(model, loader, device):
+    y_pred, y_true = get_predictions(model, loader, device)
+    return float(np.mean((y_pred - y_true) ** 2))
 
 
-def train_full(model, train_loader, val_loader, lr, weight_decay, max_epochs, patience, device, pos_weight=None, trial=None, verbose=True):
-    """
-    Trains the model for the full number of epochs with early stopping and returns the best validation ROC-AUC.
-    """
-    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+def train_full(model, train_loader, val_loader, lr, weight_decay, max_epochs, patience, device, trial=None, verbose=True):
+    criterion = nn.MSELoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
-    
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="max", factor=0.5, patience=max(1, patience // 3), min_lr=1e-6
+        optimizer, mode="min", factor=0.5, patience=max(1, patience // 3), min_lr=1e-6
     )
-
     es = EarlyStopping(patience=patience)
-    
     for epoch in range(max_epochs):
         train_loss = train_one_epoch(model, train_loader, optimizer, criterion, device)
-        val_auc = val_roc_auc(model, val_loader, device)
-        
-        scheduler.step(val_auc)
-        es.step(val_auc, model)
-        
+        val_mse = val_mean_mse(model, val_loader, device)
+        scheduler.step(val_mse)
+        es.step(-val_mse, model)
         if (verbose and (epoch + 1) % 10 == 0):
-            print(f"Epoch {epoch+1}/{max_epochs} — train_loss={train_loss:.4f} val_auc={val_auc:.4f}")
-        
-        # Report intermediate results to Optuna for pruning
+            print(f"Epoch {epoch+1}/{max_epochs} — train_loss={train_loss:.4f} val_mse={val_mse:.6f}")
         if (trial is not None):
-            trial.report(val_auc, epoch)
-
-            # Check if the trial should be pruned based on the intermediate value.
+            trial.report(val_mse, epoch)
             if trial.should_prune():
                 raise optuna.exceptions.TrialPruned()
-        
         if (es.should_stop):
             break
-    
     es.restore_best(model)
-    
-    return es.best_score
+    return -es.best_score
 
 
 def load_tcn_model(model_path: str | Path, device: str = "cpu"):
@@ -286,19 +259,13 @@ def load_tcn_model(model_path: str | Path, device: str = "cpu"):
 
 @torch.no_grad()
 def predict_tcn(model_path: str | Path, data_dir: str | Path | None = None, split: str = "test", device: str = "cpu", batch_size: int = 512):
-    """
-    Loads a trained TCN model and returns predicted probabilities, binary predictions, and true labels for the specified dataset split.
-    """
     if (data_dir is None):
         raise ValueError("data_dir must be provided explicitly. Use main_pipeline.py to select the dataset from feature_preset and lookback.")
-    
     model = load_tcn_model(model_path, device)
     splits, _ = load_dataset(data_dir)
     loader = make_loader(splits[split]["X"], splits[split]["y"], batch_size, shuffle=False)
-    y_prob, y_true = get_predictions(model, loader, device)
-    y_pred = (y_prob >= 0.5).astype(int)
-    
-    return y_prob, y_pred, y_true
+    y_pred, y_true = get_predictions(model, loader, device)
+    return y_pred, y_true
 
 
 @torch.no_grad()
@@ -339,7 +306,7 @@ def train_tcn(
         raise ValueError("data_dir must be provided explicitly. Use main_pipeline.py to select the dataset from feature_preset and lookback.")
     
     if (output_dir is None):
-        output_dir = PIPELINE_ROOT / "outputs"
+        output_dir = REPO_ROOT / "outputs" / "price"
     
     # Set up directories, device, and random seeds for reproducibility.
     data_dir, output_dir = Path(data_dir), Path(output_dir)
@@ -358,16 +325,9 @@ def train_tcn(
     X_test, y_test = splits["test"]["X"], splits["test"]["y"]
     input_dim = X_train.shape[2]
 
-    # Compute class imbalance ratio for weighted loss to help with convergence, especially if the dataset is imbalanced.
-    n_pos = float(y_train.sum())
-    n_neg = float(len(y_train) - n_pos)
-    pos_weight = torch.tensor([n_neg / n_pos], dtype=torch.float32).to(device)
-    
-    # Suppress Optuna logging except for warnings and errors to keep the output clean during hyperparameter tuning.
     optuna.logging.set_verbosity(optuna.logging.WARNING)
 
     def objective(trial):
-        """Objective function for Optuna hyperparameter optimization. Trains a TCN model with the given hyperparameters and returns the best validation ROC-AUC."""
         params = {
             "num_channels": trial.suggest_categorical("num_channels", [32, 64, 128]),
             "num_layers": trial.suggest_int("num_layers", 2, 5),
@@ -376,55 +336,43 @@ def train_tcn(
             "lr": trial.suggest_float("lr", 1e-4, 1e-2, log=True),
             "batch_size": trial.suggest_categorical("batch_size", [64, 128, 256, 512]),
             "weight_decay": trial.suggest_float("weight_decay", 1e-6, 1e-3, log=True),
-            "activation": trial.suggest_categorical("activation", ["relu", "gelu", "silu"]) 
+            "activation": trial.suggest_categorical("activation", ["relu", "gelu", "silu"])
         }
-
-        # Initialize a TCN model with the suggested hyperparameters, create DataLoaders for training and validation sets, and train the model while tracking the best validation ROC-AUC for this trial.
         model = TCNClassifier(input_dim, params["num_channels"], params["num_layers"], params["kernel_size"], params["dropout"], params["activation"]).to(device)
         train_loader = make_loader(X_train, y_train, params["batch_size"], shuffle=True)
         val_loader = make_loader(X_val, y_val, params["batch_size"], shuffle=False)
-        best_val = train_full(model, train_loader, val_loader, params["lr"], params["weight_decay"], max_epochs_per_trial, patience, device, pos_weight=pos_weight, trial=trial, verbose=False)
-        
-        return best_val
+        return train_full(model, train_loader, val_loader, params["lr"], params["weight_decay"], max_epochs_per_trial, patience, device, trial=trial, verbose=False)
 
-    # Run Optuna hyperparameter optimization with the defined objective function, using TPE sampler and median pruner for efficient search.
     study = optuna.create_study(
-        direction="maximize",
+        direction="minimize",
         sampler=optuna.samplers.TPESampler(seed=seed),
         pruner=optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=5)
     )
     study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
     best = study.best_params
-    print(f"\nBest val ROC-AUC: {study.best_value:.4f}")
+    print(f"\nBest val MSE: {study.best_value:.6f}")
     print(f"Best params: {json.dumps(best, indent=4)}")
 
-    # Save the best hyperparameters and validation score to a JSON file for record-keeping and reproducibility.
     with open(model_dir / "tcn_best_params.json", "w") as f:
-        json.dump({"best_val_roc_auc": study.best_value, **best}, f, indent=4)
+        json.dump({"best_val_mse": study.best_value, **best}, f, indent=4)
 
-    # Train the final model with the best hyperparameters on the combined training and validation sets, using early stopping to prevent overfitting, and save the best model checkpoint.
     final_model = TCNClassifier(input_dim, best["num_channels"], best["num_layers"], best["kernel_size"], best["dropout"], best["activation"]).to(device)
     train_loader = make_loader(X_train, y_train, best["batch_size"], shuffle=True)
     val_loader = make_loader(X_val, y_val, best["batch_size"], shuffle=False)
-    train_full(final_model, train_loader, val_loader, best["lr"], best["weight_decay"], max_epochs_final, patience, device, pos_weight=pos_weight, verbose=True)
+    train_full(final_model, train_loader, val_loader, best["lr"], best["weight_decay"], max_epochs_final, patience, device, verbose=True)
 
-    # Save the final model checkpoint along with the best hyperparameters and input dimension for later loading and inference.
     model_path = model_dir / "tcn_best.pt"
     torch.save({"model_state_dict": final_model.state_dict(), "params": best, "input_dim": input_dim}, model_path)
 
-    # Evaluate the final model on the test set, compute classification metrics, and save them to a JSON file for analysis.
     test_loader = make_loader(X_test, y_test, best["batch_size"], shuffle=False)
-    y_prob, y_true = get_predictions(final_model, test_loader, device)
-    y_pred = (y_prob >= 0.5).astype(int)
-    test_metrics = compute_classification_metrics(y_true, y_pred, y_prob)
+    y_pred, y_true = get_predictions(final_model, test_loader, device)
+    test_metrics = compute_regression_metrics(y_true, y_pred)
     test_metrics["best_params"] = best
-    test_metrics["best_val_roc_auc"] = study.best_value
+    test_metrics["best_val_mse"] = study.best_value
 
-    # Save test metrics to a JSON file and print key metrics to the console for quick reference.
     metrics_path = metrics_dir / "tcn_metrics.json"
     save_metrics(test_metrics, metrics_path)
-    print(f"Test ROC-AUC: {test_metrics['roc_auc']:.4f}")
-    print(f"Test Accuracy: {test_metrics['accuracy']:.4f}")
-    print(f"Test F1: {test_metrics['f1_score']:.4f}")
-    print(f"Test Precision: {test_metrics['precision']:.4f}")
-    print(f"Test Recall: {test_metrics['recall']:.4f}")
+    print(f"Test MAE: {test_metrics['mae']:.6f}")
+    print(f"Test RMSE: {test_metrics['rmse']:.6f}")
+    print(f"Test R²: {test_metrics['r2']:.4f}")
+    print(f"Test Direction Accuracy: {test_metrics['direction_accuracy']:.4f}")

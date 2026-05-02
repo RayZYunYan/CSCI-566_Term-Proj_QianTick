@@ -146,48 +146,56 @@ def extract_features(config: dict) -> pd.DataFrame:
     读取 news_article_embeddings.parquet（B 的输出），按 7 天窗口聚合，
     输出覆盖所有 (ticker, trading_date) 的特征 DataFrame。
 
-    Args:
-        config: 从 news_config.yaml 加载的配置字典
-
-    Returns:
-        df: MultiIndex (ticker, date)，列 feat_0~feat_770
-
-    TODO (子任务 C)：
-        - 读取 config["data"]["article_embeddings"]
-        - 读取 price 模块的日期列表，确定需要覆盖的所有 (ticker, date)
-        - 对每个 (ticker, date)，取过去 news_window 天内的文章（按时间倒序取最多 50 篇）
-        - 调用 NewsFeatureAggregator.forward() 聚合
-        - 缺失 (ticker, date) 用全零向量填充，不能漏掉（否则 Fusion 会报错）
-        - 保存到 config["data"]["news_features"]
+    B 优化后的新 schema：(article_id, ticker, feat_0~feat_770)，无 date 列。
+    7天窗口的 (ticker, date) → article_id 映射从 news_cleaned.parquet 读取，
+    避免了 B 阶段对同一文章重复编码 7 次的算力浪费。
     """
     data_cfg = config["data"]
     model_cfg = config.get("model", {})
+    feat_cols = [f"feat_{i}" for i in range(model_cfg.get("feature_dim", 771))]
+
     article_path = Path(data_cfg["article_embeddings"])
+    cleaned_path = Path(data_cfg["cleaned"])
     if not article_path.exists():
         raise FileNotFoundError(f"Article embedding file not found: {article_path}")
+    if not cleaned_path.exists():
+        raise FileNotFoundError(f"Cleaned news file not found: {cleaned_path}")
 
-    df = pd.read_parquet(article_path)
-    expected_meta_cols = {"ticker", "date", "article_id"}
-    feat_cols = [f"feat_{i}" for i in range(model_cfg.get("feature_dim", 771))]
-    missing = (expected_meta_cols | set(feat_cols)) - set(df.columns)
+    # ── 读取 embeddings，建立 article_id → 向量行号 的索引 ──────────────────
+    emb_df = pd.read_parquet(article_path)
+    missing = ({"article_id", "ticker"} | set(feat_cols)) - set(emb_df.columns)
     if missing:
         raise ValueError(f"article_embeddings missing columns: {sorted(missing)}")
 
-    df = df[["ticker", "date", "article_id"] + feat_cols].copy()
-    df["ticker"] = df["ticker"].astype(str).str.upper()
-    df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
+    emb_df["article_id"] = emb_df["article_id"].astype(str)
+    emb_array = emb_df[feat_cols].to_numpy(dtype=np.float32)          # (N, 771)
+    aid_to_idx = {aid: i for i, aid in enumerate(emb_df["article_id"])}
 
-    cover_pairs = _load_price_coverage_pairs(config, df)
+    # ── 读取 cleaned parquet，获取 (ticker, date) → article_id 映射 ─────────
+    cleaned_df = pd.read_parquet(
+        cleaned_path, columns=["ticker", "date", "article_id", "publish_datetime"]
+    )
+    cleaned_df["ticker"] = cleaned_df["ticker"].astype(str).str.upper()
+    cleaned_df["date"] = pd.to_datetime(cleaned_df["date"]).dt.strftime("%Y-%m-%d")
+    cleaned_df["article_id"] = cleaned_df["article_id"].astype(str)
+    # 按发布时间排序，保证 NewsFeatureAggregator 的"取最新50篇"逻辑正确
+    cleaned_df = cleaned_df.sort_values(["ticker", "date", "publish_datetime"])
+
+    # ── 为每个 (ticker, date) 构建对应的 embedding 矩阵 ──────────────────────
+    article_grouped: dict[tuple[str, str], torch.Tensor] = {}
+    for (ticker, date), g in cleaned_df.groupby(["ticker", "date"], sort=False):
+        idxs = [aid_to_idx[aid] for aid in g["article_id"] if aid in aid_to_idx]
+        article_grouped[(ticker, date)] = (
+            torch.from_numpy(emb_array[idxs]) if idxs
+            else torch.zeros(0, len(feat_cols), dtype=torch.float32)
+        )
+
+    cover_pairs = _load_price_coverage_pairs(config, cleaned_df)
     if cover_pairs.empty:
         return pd.DataFrame(columns=["ticker", "date"] + feat_cols)
     cover_pairs["ticker"] = cover_pairs["ticker"].astype(str).str.upper()
     cover_pairs["date"] = pd.to_datetime(cover_pairs["date"]).dt.strftime("%Y-%m-%d")
     cover_pairs = cover_pairs.drop_duplicates().sort_values(["ticker", "date"]).reset_index(drop=True)
-
-    article_grouped = {}
-    for (ticker, date), g in df.groupby(["ticker", "date"], sort=False):
-        emb = torch.tensor(g[feat_cols].to_numpy(dtype=np.float32), dtype=torch.float32)
-        article_grouped[(ticker, date)] = emb
 
     agg = NewsFeatureAggregator(
         mode=model_cfg.get("aggregation", "mean"),
