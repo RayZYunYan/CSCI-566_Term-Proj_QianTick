@@ -1,32 +1,24 @@
 # QianTick Dependencies
 #
-# Recommended local setup:
-# - macOS (Apple Silicon or Intel)
+# Recommended setup:
 # - Python 3.11
-# - Create a fresh virtual environment instead of reusing the old Python 3.9 venv
+# - Create a fresh virtual environment
 
 # Core ML
 torch==2.8.0
 transformers==4.57.6
+
+# Hyperparameter tuning
+optuna==4.8.0
 
 # Data
 yfinance==1.2.0
 pandas==2.3.3
 numpy==2.0.2
 pyarrow==21.0.0
+requests==2.32.4
+python-dotenv==1.1.0
 
 # Training utils
 scikit-learn==1.6.1
 PyYAML==6.0.3
-
-# Notebook / visualization
-jupyter==1.1.1
-ipykernel==6.31.0
-matplotlib==3.9.4
-seaborn==0.13.2
-
-# Optional technical-indicator libraries.
-# They are not used by the current codebase, so we keep them optional to make
-# first-time setup on macOS much smoother.
-# pandas-ta
-# TA-Lib
