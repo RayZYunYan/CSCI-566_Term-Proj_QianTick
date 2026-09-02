@@ -6,7 +6,7 @@
 
 # Core ML
 torch==2.8.0
-transformers==4.57.6
+transformers==5.10.1
 
 # Hyperparameter tuning
 optuna==4.8.0
